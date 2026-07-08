@@ -14,6 +14,8 @@ import (
 	"github.com/sanketsudake/claude-agent-proxy/internal/cost"
 	"github.com/sanketsudake/claude-agent-proxy/internal/proxy"
 	"github.com/sanketsudake/claude-agent-proxy/internal/sink"
+	"github.com/sanketsudake/claude-agent-proxy/internal/sink/clickhouse"
+	"github.com/sanketsudake/claude-agent-proxy/internal/sink/loki"
 	"github.com/sanketsudake/claude-agent-proxy/internal/sink/markdown"
 	"github.com/sanketsudake/claude-agent-proxy/internal/sink/sqlite"
 	"github.com/sanketsudake/claude-agent-proxy/internal/sink/terminal"
@@ -77,6 +79,14 @@ func buildSinks(cfg config.Config, logger *slog.Logger) ([]sink.Sink, error) {
 		}
 		sinks = append(sinks, s)
 		logger.Info("sqlite sink enabled", "path", cfg.Sinks.SQLite.Path)
+	}
+	if cfg.Sinks.ClickHouse.Enabled {
+		sinks = append(sinks, clickhouse.New(cfg.Sinks.ClickHouse, logger))
+		logger.Info("clickhouse sink enabled", "url", cfg.Sinks.ClickHouse.URL)
+	}
+	if cfg.Sinks.Loki.Enabled {
+		sinks = append(sinks, loki.New(cfg.Sinks.Loki, logger))
+		logger.Info("loki sink enabled", "url", cfg.Sinks.Loki.URL)
 	}
 	return sinks, nil
 }
