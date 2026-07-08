@@ -4,27 +4,66 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
 	"github.com/sanketsudake/claude-agent-proxy/internal/config"
+	"github.com/sanketsudake/claude-agent-proxy/internal/cost"
 	"github.com/sanketsudake/claude-agent-proxy/internal/proxy"
+	"github.com/sanketsudake/claude-agent-proxy/internal/sink"
+	"github.com/sanketsudake/claude-agent-proxy/internal/sink/terminal"
 )
 
 func run(cfg config.Config, logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	sinks, err := buildSinks(cfg, logger)
+	if err != nil {
+		return err
+	}
+	dispatcher := sink.NewDispatcher(logger, cfg.QueueSize, sink.Policy(cfg.QueuePolicy), sinks...)
+	builder := &capture.Builder{Estimator: cost.NewEstimator(cfg.Pricing)}
+
 	handler, err := proxy.New(proxy.Options{
 		UpstreamURL:     cfg.UpstreamURL,
 		MaxRequestBytes: cfg.MaxRequestBytes,
 		MaxCaptureBytes: cfg.MaxCaptureBytes,
-		OnCapture:       nil, // capture pipeline wired in Phase 2
-		Logger:          logger,
+		OnCapture: func(c *proxy.Capture) {
+			// Runs on the response-body goroutine: build off it entirely.
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.Error("capture pipeline panicked", "panic", r)
+					}
+				}()
+				dispatcher.Dispatch(builder.Build(c))
+			}()
+		},
+		Logger: logger,
 	})
 	if err != nil {
 		return err
 	}
 
-	return proxy.Serve(ctx, fmt.Sprintf(":%d", cfg.Port), handler, logger)
+	serveErr := proxy.Serve(ctx, fmt.Sprintf(":%d", cfg.Port), handler, logger)
+
+	drainCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := dispatcher.Close(drainCtx); err != nil {
+		logger.Warn("dispatcher close", "err", err)
+	}
+	return serveErr
+}
+
+func buildSinks(cfg config.Config, logger *slog.Logger) ([]sink.Sink, error) {
+	var sinks []sink.Sink
+	if !cfg.Quiet {
+		sinks = append(sinks, terminal.New(os.Stdout))
+	}
+	_ = logger // markdown/sqlite/clickhouse/loki sinks appended in later phases
+	return sinks, nil
 }
