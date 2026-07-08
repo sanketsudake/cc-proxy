@@ -1,0 +1,105 @@
+{
+  "uid": "cap-latency-cost",
+  "title": "Latency & Cost",
+  "tags": ["claude-agent-proxy"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Latency p50 / p95 (full response)",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 0,
+          "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 5 minute) AS time, quantile(0.5)(latency_ms) AS p50, quantile(0.95)(latency_ms) AS p95 FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Time to first token p50 / p95",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 0,
+          "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 5 minute) AS time, quantile(0.5)(ttft_ms) AS p50, quantile(0.95)(ttft_ms) AS p95 FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime AND ttft_ms > 0 GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Estimated cost per hour by model (USD)",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 0,
+          "rawSql": "SELECT toStartOfHour(ts) AS time, model, sum(cost_usd) AS cost FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime GROUP BY time, model ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "piechart",
+      "title": "Stop reason breakdown",
+      "gridPos": { "h": 9, "w": 6, "x": 12, "y": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 1,
+          "rawSql": "SELECT if(stop_reason = '', '(none)', stop_reason) AS stop_reason, count() AS requests FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime GROUP BY stop_reason ORDER BY requests DESC"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Cumulative estimated cost (range)",
+      "gridPos": { "h": 9, "w": 6, "x": 18, "y": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 1,
+          "rawSql": "SELECT sum(cost_usd) AS total_cost FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "logs",
+      "title": "Request log (Loki drill-down)",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 18 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"claude-agent-proxy\"} | json"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+apiVersion: 1
+
+datasources:
+  - name: ClickHouse
+    uid: ch
+    type: grafana-clickhouse-datasource
+    access: proxy
+    isDefault: true
+    jsonData:
+      host: clickhouse
+      port: 8123
+      protocol: http
+      username: claude
+      defaultDatabase: claude
+    secureJsonData:
+      password: claude
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100

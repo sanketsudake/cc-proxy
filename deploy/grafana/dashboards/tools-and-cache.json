@@ -1,0 +1,75 @@
+{
+  "uid": "cap-tools-cache",
+  "title": "Tools & Cache",
+  "tags": ["claude-agent-proxy"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "bargauge",
+      "title": "Top tools by bytes (avg per request)",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 1,
+          "rawSql": "SELECT name, round(avg(bytes)) AS avg_bytes FROM claude.requests ARRAY JOIN tools.name AS name, tools.bytes AS bytes WHERE ts >= $__fromTime AND ts <= $__toTime GROUP BY name ORDER BY avg_bytes DESC LIMIT 20"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Cache hit rate (input side)",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0, "custom": { "fillOpacity": 20 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 0,
+          "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 5 minute) AS time, sum(cache_read_tokens) / greatest(sum(input_tokens + cache_read_tokens + cache_creation_tokens), 1) AS cache_hit_rate FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Request composition (bytes)",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 10 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "stacking": { "mode": "normal" }, "fillOpacity": 40 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 0,
+          "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 5 minute) AS time, avg(system_bytes) AS system_prompt, avg(tools_bytes) AS tool_definitions, avg(total_bytes - system_bytes - tools_bytes) AS messages_and_rest FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Tool count & bytes per request (latest 20)",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 10 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 1,
+          "rawSql": "SELECT ts, model, length(tools.name) AS tool_count, tools_bytes, total_bytes, message_count FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime ORDER BY ts DESC LIMIT 20"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "uid": "cap-token-usage",
+  "title": "Token Usage",
+  "tags": ["claude-agent-proxy"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Tokens over time (stacked)",
+      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "fieldConfig": {
+        "defaults": { "custom": { "stacking": { "mode": "normal" }, "fillOpacity": 40, "drawStyle": "bars" }, "unit": "short" },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 0,
+          "rawSql": "SELECT toStartOfInterval(ts, INTERVAL 5 minute) AS time, sum(input_tokens) AS input, sum(output_tokens) AS output, sum(cache_read_tokens) AS cache_read, sum(cache_creation_tokens) AS cache_write FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "piechart",
+      "title": "Total input tokens by model",
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 1,
+          "rawSql": "SELECT model, sum(input_tokens + cache_read_tokens + cache_creation_tokens) AS total_input FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime GROUP BY model ORDER BY total_input DESC"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Requests per minute",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "fieldConfig": { "defaults": { "unit": "reqpm", "custom": { "drawStyle": "bars", "fillOpacity": 60 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 0,
+          "rawSql": "SELECT toStartOfMinute(ts) AS time, count() AS requests FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Totals in range",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ch" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "editorType": "sql",
+          "format": 1,
+          "rawSql": "SELECT count() AS requests, sum(input_tokens) AS input, sum(output_tokens) AS output, sum(cache_read_tokens) AS cache_read, round(sum(cost_usd), 4) AS est_cost_usd FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime"
+        }
+      ]
+    }
+  ]
+}
