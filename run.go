@@ -15,6 +15,7 @@ import (
 	"github.com/sanketsudake/claude-agent-proxy/internal/proxy"
 	"github.com/sanketsudake/claude-agent-proxy/internal/sink"
 	"github.com/sanketsudake/claude-agent-proxy/internal/sink/markdown"
+	"github.com/sanketsudake/claude-agent-proxy/internal/sink/sqlite"
 	"github.com/sanketsudake/claude-agent-proxy/internal/sink/terminal"
 )
 
@@ -68,6 +69,14 @@ func buildSinks(cfg config.Config, logger *slog.Logger) ([]sink.Sink, error) {
 	if cfg.Sinks.Markdown.Enabled {
 		sinks = append(sinks, markdown.New(cfg.Sinks.Markdown.Dir))
 		logger.Info("markdown sink enabled", "dir", cfg.Sinks.Markdown.Dir)
+	}
+	if cfg.Sinks.SQLite.Enabled {
+		s, err := sqlite.New(cfg.Sinks.SQLite.Path)
+		if err != nil {
+			return nil, fmt.Errorf("sqlite sink: %w", err)
+		}
+		sinks = append(sinks, s)
+		logger.Info("sqlite sink enabled", "path", cfg.Sinks.SQLite.Path)
 	}
 	return sinks, nil
 }
