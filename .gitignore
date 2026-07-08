@@ -1,0 +1,8 @@
+/claude-agent-proxy
+/logs/
+*.db
+*.db-wal
+*.db-shm
+.env
+dist/
+coverage.out
