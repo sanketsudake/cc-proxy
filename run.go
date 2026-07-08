@@ -14,6 +14,7 @@ import (
 	"github.com/sanketsudake/claude-agent-proxy/internal/cost"
 	"github.com/sanketsudake/claude-agent-proxy/internal/proxy"
 	"github.com/sanketsudake/claude-agent-proxy/internal/sink"
+	"github.com/sanketsudake/claude-agent-proxy/internal/sink/markdown"
 	"github.com/sanketsudake/claude-agent-proxy/internal/sink/terminal"
 )
 
@@ -64,6 +65,9 @@ func buildSinks(cfg config.Config, logger *slog.Logger) ([]sink.Sink, error) {
 	if !cfg.Quiet {
 		sinks = append(sinks, terminal.New(os.Stdout))
 	}
-	_ = logger // markdown/sqlite/clickhouse/loki sinks appended in later phases
+	if cfg.Sinks.Markdown.Enabled {
+		sinks = append(sinks, markdown.New(cfg.Sinks.Markdown.Dir))
+		logger.Info("markdown sink enabled", "dir", cfg.Sinks.Markdown.Dir)
+	}
 	return sinks, nil
 }

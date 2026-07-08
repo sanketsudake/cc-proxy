@@ -1,0 +1,125 @@
+<meta>
+
+- **timestamp**: 2026-07-08T10:30:00Z
+- **model**: claude-sonnet-5
+- **endpoint**: POST /v1/messages
+- **upstream status**: 200
+- **latency**: 4200ms (ttft 350ms)
+
+</meta>
+
+<audit>
+
+**9,220 input tokens** billed for this request (from the response usage).
+
+- **tools**: 2 definitions, 189 bytes (~47 tokens)
+- **system prompt**: 98 bytes (~25 tokens)
+- **total request**: 724 bytes
+- **estimated cost**: $0.0123
+
+**Tools, ranked by size — this is your cut list:**
+
+| tool | bytes | ~tokens | % of request |
+| --- | --: | --: | --: |
+| get_weather | 137 | ~34 | 18.9% |
+| tiny | 52 | ~13 | 7.2% |
+
+</audit>
+
+<headers>
+
+```
+Authorization: [REDACTED]
+Content-Type: application/json
+```
+
+</headers>
+
+<system-prompt>
+
+You are a helpful assistant.
+
+<!-- cache_control breakpoint -->
+
+</system-prompt>
+
+<tools>
+
+### get_weather
+
+Get the weather
+
+```json
+{
+  "properties": {
+    "city": {
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+
+### tiny
+
+```json
+{
+  "type": "object"
+}
+```
+
+</tools>
+
+<messages>
+
+<message index="1" role="user">
+
+What is the weather in Pune?
+
+</message>
+
+<message index="2" role="assistant">
+
+<tool-use name="get_weather" id="toolu_1">
+
+```json
+{
+  "city": "Pune"
+}
+```
+
+</tool-use>
+
+</message>
+
+<message index="3" role="user">
+
+<tool-result tool-use-id="toolu_1" is-error="false">
+
+31C, sunny
+
+</tool-result>
+
+</message>
+
+</messages>
+
+<response>
+
+- **stop reason**: end_turn
+
+- **usage**: {"input_tokens":120,"output_tokens":48,"cache_read_input_tokens":9000,"cache_creation_input_tokens":100}
+
+<thinking>
+
+considering the tool result
+
+</thinking>
+
+<assistant-text>
+
+It is 31C and sunny in Pune.
+
+</assistant-text>
+
+</response>
