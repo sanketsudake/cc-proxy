@@ -38,10 +38,10 @@ func TestWriteAndQuery(t *testing.T) {
 	if err := s.Write(context.Background(), rec); err != nil {
 		t.Fatal(err)
 	}
-	// Idempotent on re-delivery of the same id.
-	if err := s.Write(context.Background(), rec); err == nil {
-		// request_tools rows duplicate on replace; acceptable for a logger,
-		// but the requests row must stay unique.
+	// Re-delivery of the same id must not error, and the requests row must
+	// stay unique (asserted below).
+	if err := s.Write(context.Background(), rec); err != nil {
+		t.Fatalf("re-delivery: %v", err)
 	}
 
 	var model string
