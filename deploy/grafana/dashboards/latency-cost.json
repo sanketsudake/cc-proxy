@@ -1,7 +1,7 @@
 {
   "uid": "cap-latency-cost",
   "title": "Latency & Cost",
-  "tags": ["claude-agent-proxy"],
+  "tags": ["cc-proxy"],
   "timezone": "browser",
   "schemaVersion": 39,
   "refresh": "30s",
@@ -97,7 +97,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{job=\"claude-agent-proxy\"} | json"
+          "expr": "{job=\"cc-proxy\"} | json"
         }
       ]
     }

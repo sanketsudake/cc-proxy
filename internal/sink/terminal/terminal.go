@@ -9,7 +9,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/capture"
 )
 
 const topN = 12
@@ -23,7 +23,7 @@ func New(out io.Writer) *Sink { return &Sink{Out: out} }
 func (s *Sink) Name() string { return "terminal" }
 
 func (s *Sink) Write(_ context.Context, rec *capture.Record) error {
-	fmt.Fprintf(s.Out, "\n[claude-agent-proxy] %s %s · status %d · %d tools · %s tool bytes\n",
+	fmt.Fprintf(s.Out, "\n[cc-proxy] %s %s · status %d · %d tools · %s tool bytes\n",
 		rec.Model, rec.Endpoint, rec.StatusCode, len(rec.Tools), formatInt(rec.ToolsBytes))
 
 	tw := tabwriter.NewWriter(s.Out, 2, 4, 2, ' ', 0)

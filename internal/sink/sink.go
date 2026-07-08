@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/capture"
 )
 
 // Sink consumes capture records. Write is called from a single dedicated

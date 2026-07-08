@@ -1,4 +1,4 @@
-name: claude-agent-proxy
+name: cc-proxy
 
 services:
   clickhouse:

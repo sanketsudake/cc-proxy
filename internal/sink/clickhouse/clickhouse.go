@@ -14,9 +14,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
-	"github.com/sanketsudake/claude-agent-proxy/internal/config"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sink"
+	"github.com/sanketsudake/cc-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/config"
+	"github.com/sanketsudake/cc-proxy/internal/sink"
 )
 
 // row is one JSONEachRow line; column names match the DDL in

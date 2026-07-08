@@ -3,10 +3,10 @@ package capture
 import (
 	"strings"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/audit"
-	"github.com/sanketsudake/claude-agent-proxy/internal/cost"
-	"github.com/sanketsudake/claude-agent-proxy/internal/proxy"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sse"
+	"github.com/sanketsudake/cc-proxy/internal/audit"
+	"github.com/sanketsudake/cc-proxy/internal/cost"
+	"github.com/sanketsudake/cc-proxy/internal/proxy"
+	"github.com/sanketsudake/cc-proxy/internal/sse"
 )
 
 // Builder converts raw proxy captures into Records.

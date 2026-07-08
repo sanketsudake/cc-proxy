@@ -1,4 +1,4 @@
-// claude-agent-proxy — see what Claude Code actually sends the model.
+// cc-proxy — see what Claude Code actually sends the model.
 //
 // A transparent logging proxy between Claude Code and the Anthropic API.
 // Point Claude Code at it:
@@ -13,14 +13,14 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/config"
-	"github.com/sanketsudake/claude-agent-proxy/internal/version"
+	"github.com/sanketsudake/cc-proxy/internal/config"
+	"github.com/sanketsudake/cc-proxy/internal/version"
 )
 
 func main() {
 	cfg, err := config.Load(os.Args[1:], os.Stderr)
 	if errors.Is(err, config.ErrVersionRequested) {
-		fmt.Println("claude-agent-proxy", version.String())
+		fmt.Println("cc-proxy", version.String())
 		return
 	}
 	if errors.Is(err, flag.ErrHelp) {

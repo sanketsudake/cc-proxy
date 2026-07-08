@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
-	"github.com/sanketsudake/claude-agent-proxy/internal/config"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sse"
+	"github.com/sanketsudake/cc-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/config"
+	"github.com/sanketsudake/cc-proxy/internal/sse"
 )
 
 func TestPushShape(t *testing.T) {
@@ -55,7 +55,7 @@ func TestPushShape(t *testing.T) {
 		t.Fatalf("streams = %d", len(p.Streams))
 	}
 	st := p.Streams[0]
-	if st.Stream["job"] != "claude-agent-proxy" || st.Stream["model"] != "claude-opus-4-8" {
+	if st.Stream["job"] != "cc-proxy" || st.Stream["model"] != "claude-opus-4-8" {
 		t.Errorf("labels = %v", st.Stream)
 	}
 	if len(st.Values) != 1 {

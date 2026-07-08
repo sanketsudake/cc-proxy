@@ -12,7 +12,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/capture"
 )
 
 //go:embed schema.sql

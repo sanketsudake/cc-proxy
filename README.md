@@ -1,4 +1,4 @@
-# claude-agent-proxy
+# cc-proxy
 
 See what Claude Code actually sends the model — and analyze it however you like.
 
@@ -12,7 +12,7 @@ Inspired by [Matt Pocock's agent-proxy gist](https://gist.github.com/mattpocock/
 
 ```sh
 make build
-./claude-agent-proxy
+./cc-proxy
 ```
 
 Point Claude Code at it in another terminal:
@@ -21,14 +21,14 @@ Point Claude Code at it in another terminal:
 ANTHROPIC_BASE_URL=http://localhost:8787 claude
 ```
 
-Every `/v1/messages` request now prints a ranked audit table to the proxy's terminal and writes a readable `.md` + raw `.request.txt` pair under `logs/`, plus a row in `claude-agent-proxy.db` (SQLite).
+Every `/v1/messages` request now prints a ranked audit table to the proxy's terminal and writes a readable `.md` + raw `.request.txt` pair under `logs/`, plus a row in `cc-proxy.db` (SQLite).
 `count_tokens` housekeeping calls pass through unlogged.
 
 ## The analytics stack (optional)
 
 ```sh
 make up          # ClickHouse + Loki + Grafana via docker compose
-CAP_SINK_CLICKHOUSE_ENABLED=true CAP_SINK_LOKI_ENABLED=true ./claude-agent-proxy
+CAP_SINK_CLICKHOUSE_ENABLED=true CAP_SINK_LOKI_ENABLED=true ./cc-proxy
 ```
 
 Open [http://localhost:3000](http://localhost:3000) (anonymous admin, no login) — three dashboards are provisioned under the *Claude Agent Proxy* folder:
@@ -68,7 +68,7 @@ Precedence: flags > environment (`CAP_*`) > JSON config file (`--config config.j
 | `CAP_QUIET` | `false` | Suppress per-request terminal audit tables |
 | `CAP_QUEUE_SIZE` / `CAP_QUEUE_POLICY` | `256` / `drop` | Per-sink queue capacity and full-queue policy (`drop` or `block`) |
 | `CAP_SINK_MARKDOWN_ENABLED` / `CAP_SINK_MARKDOWN_DIR` | `true` / `logs` | Markdown sink |
-| `CAP_SINK_SQLITE_ENABLED` / `CAP_SINK_SQLITE_PATH` | `true` / `claude-agent-proxy.db` | SQLite sink |
+| `CAP_SINK_SQLITE_ENABLED` / `CAP_SINK_SQLITE_PATH` | `true` / `cc-proxy.db` | SQLite sink |
 | `CAP_SINK_CLICKHOUSE_ENABLED` / `CAP_SINK_CLICKHOUSE_URL` | `false` / `http://localhost:8123` | ClickHouse sink (batch inserts) |
 | `CAP_SINK_LOKI_ENABLED` / `CAP_SINK_LOKI_URL` | `false` / `http://localhost:3100` | Loki sink (push API) |
 
@@ -93,7 +93,7 @@ All cost figures are estimates — prices drift, override them when they do.
 **SQLite** — zero services needed:
 
 ```sh
-sqlite3 claude-agent-proxy.db \
+sqlite3 cc-proxy.db \
   "SELECT model, count(*), sum(input_tokens + cache_read_tokens), round(sum(cost_usd), 4)
    FROM requests GROUP BY model"
 ```
@@ -117,8 +117,8 @@ curl -s 'http://localhost:8123/' -H 'X-ClickHouse-User: claude' -H 'X-ClickHouse
 **Loki (LogQL)** — grep-style over structured lines:
 
 ```logql
-{job="claude-agent-proxy"} | json | cost_usd > 0.05
-{job="claude-agent-proxy", model="claude-opus-4-8"} | json | stop_reason != "end_turn"
+{job="cc-proxy"} | json | cost_usd > 0.05
+{job="cc-proxy", model="claude-opus-4-8"} | json | stop_reason != "end_turn"
 ```
 
 ## Development

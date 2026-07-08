@@ -14,9 +14,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
-	"github.com/sanketsudake/claude-agent-proxy/internal/config"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sink"
+	"github.com/sanketsudake/cc-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/config"
+	"github.com/sanketsudake/cc-proxy/internal/sink"
 )
 
 type entry struct {
@@ -123,7 +123,7 @@ func (s *Sink) send(ctx context.Context, batch []entry) error {
 	var p push
 	for model, values := range groups {
 		p.Streams = append(p.Streams, stream{
-			Stream: map[string]string{"job": "claude-agent-proxy", "model": model},
+			Stream: map[string]string{"job": "cc-proxy", "model": model},
 			Values: values,
 		})
 	}

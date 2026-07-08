@@ -116,7 +116,7 @@ func Default() Config {
 		MaxCaptureBytes: 64 << 20,  // 64 MB
 		Sinks: Sinks{
 			Markdown: MarkdownSink{Enabled: true, Dir: "logs"},
-			SQLite:   SQLiteSink{Enabled: true, Path: "claude-agent-proxy.db"},
+			SQLite:   SQLiteSink{Enabled: true, Path: "cc-proxy.db"},
 			ClickHouse: ClickHouseSink{
 				URL:           "http://localhost:8123",
 				Database:      "claude",
@@ -141,7 +141,7 @@ func Default() Config {
 func Load(args []string, stderr io.Writer) (Config, error) {
 	cfg := Default()
 
-	fs := flag.NewFlagSet("claude-agent-proxy", flag.ContinueOnError)
+	fs := flag.NewFlagSet("cc-proxy", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", envStr("CAP_CONFIG", ""), "path to JSON config file")
 	port := fs.Int("port", 0, "listen port (default 8787)")

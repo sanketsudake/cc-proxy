@@ -1,4 +1,4 @@
-module github.com/sanketsudake/claude-agent-proxy
+module github.com/sanketsudake/cc-proxy
 
 go 1.26.4
 

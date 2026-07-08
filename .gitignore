@@ -1,4 +1,4 @@
-/claude-agent-proxy
+/cc-proxy
 /logs/
 *.db
 *.db-wal

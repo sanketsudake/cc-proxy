@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/audit"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sse"
+	"github.com/sanketsudake/cc-proxy/internal/audit"
+	"github.com/sanketsudake/cc-proxy/internal/sse"
 )
 
 // Record is the single normalized capture of one proxied exchange — the

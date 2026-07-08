@@ -1,13 +1,16 @@
-BINARY := claude-agent-proxy
+BINARY := cc-proxy
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
-LDFLAGS := -X github.com/sanketsudake/claude-agent-proxy/internal/version.Version=$(VERSION) \
-           -X github.com/sanketsudake/claude-agent-proxy/internal/version.Commit=$(COMMIT)
+LDFLAGS := -X github.com/sanketsudake/cc-proxy/internal/version.Version=$(VERSION) \
+           -X github.com/sanketsudake/cc-proxy/internal/version.Commit=$(COMMIT)
 
-.PHONY: build run test lint tidy up down clean
+.PHONY: build install run test lint tidy up down clean
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) .
+
+install:
+	go install -ldflags "$(LDFLAGS)" .
 
 run: build
 	./$(BINARY)

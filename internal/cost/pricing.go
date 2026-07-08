@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/config"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sse"
+	"github.com/sanketsudake/cc-proxy/internal/config"
+	"github.com/sanketsudake/cc-proxy/internal/sse"
 )
 
 // pricing is USD per million tokens.

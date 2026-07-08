@@ -169,6 +169,25 @@ func TestGzipErrorBody(t *testing.T) {
 	}
 }
 
+func TestHealthzServedLocally(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("healthz must not reach upstream")
+	}))
+	defer upstream.Close()
+	proxySrv := httptest.NewServer(newTestHandler(t, upstream.URL, func(*Capture) {}))
+	defer proxySrv.Close()
+
+	resp, err := http.Get(proxySrv.URL + "/healthz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "cc-proxy") {
+		t.Errorf("healthz = %d %q", resp.StatusCode, body)
+	}
+}
+
 func TestUpstreamDown(t *testing.T) {
 	proxySrv := httptest.NewServer(newTestHandler(t, "http://127.0.0.1:1", func(*Capture) {}))
 	defer proxySrv.Close()

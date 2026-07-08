@@ -1,7 +1,7 @@
 {
   "uid": "cap-token-usage",
   "title": "Token Usage",
-  "tags": ["claude-agent-proxy"],
+  "tags": ["cc-proxy"],
   "timezone": "browser",
   "schemaVersion": 39,
   "refresh": "30s",

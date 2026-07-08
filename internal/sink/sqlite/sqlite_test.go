@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/audit"
-	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sse"
+	"github.com/sanketsudake/cc-proxy/internal/audit"
+	"github.com/sanketsudake/cc-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/sse"
 )
 
 func TestWriteAndQuery(t *testing.T) {

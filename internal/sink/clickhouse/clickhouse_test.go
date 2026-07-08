@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/audit"
-	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
-	"github.com/sanketsudake/claude-agent-proxy/internal/config"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sse"
+	"github.com/sanketsudake/cc-proxy/internal/audit"
+	"github.com/sanketsudake/cc-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/config"
+	"github.com/sanketsudake/cc-proxy/internal/sse"
 )
 
 func testRecord(id string) *capture.Record {

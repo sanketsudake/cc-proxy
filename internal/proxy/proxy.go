@@ -83,7 +83,7 @@ func New(opts Options) (*Handler, error) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadGateway)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "claude-agent-proxy upstream error: " + err.Error(),
+				"error": "cc-proxy upstream error: " + err.Error(),
 			})
 		},
 		ErrorLog: slog.NewLogLogger(opts.Logger.Handler(), slog.LevelWarn),
@@ -116,6 +116,13 @@ func skipCapture(path string) bool {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Served locally, never proxied: lets wrapper scripts check whether a
+	// cc-proxy instance is already listening on this port.
+	if r.URL.Path == "/healthz" {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","service":"cc-proxy"}`))
+		return
+	}
 	if skipCapture(r.URL.Path) || h.opts.OnCapture == nil {
 		h.rp.ServeHTTP(w, r)
 		return
@@ -126,7 +133,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, h.opts.MaxRequestBytes+1))
 	if err != nil {
 		h.opts.Logger.Error("read request body", "path", r.URL.Path, "err", err)
-		http.Error(w, "claude-agent-proxy: failed to read request body", http.StatusBadRequest)
+		http.Error(w, "cc-proxy: failed to read request body", http.StatusBadRequest)
 		return
 	}
 	if int64(len(body)) > h.opts.MaxRequestBytes {

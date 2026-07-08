@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/config"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sse"
+	"github.com/sanketsudake/cc-proxy/internal/config"
+	"github.com/sanketsudake/cc-proxy/internal/sse"
 )
 
 func TestEstimate(t *testing.T) {

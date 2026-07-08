@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/capture"
 )
 
 type fakeSink struct {

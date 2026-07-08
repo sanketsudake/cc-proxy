@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/audit"
-	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/audit"
+	"github.com/sanketsudake/cc-proxy/internal/capture"
 )
 
 // Render produces the per-request markdown document, format-compatible with

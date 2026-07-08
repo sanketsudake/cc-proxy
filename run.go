@@ -9,16 +9,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sanketsudake/claude-agent-proxy/internal/capture"
-	"github.com/sanketsudake/claude-agent-proxy/internal/config"
-	"github.com/sanketsudake/claude-agent-proxy/internal/cost"
-	"github.com/sanketsudake/claude-agent-proxy/internal/proxy"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sink"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sink/clickhouse"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sink/loki"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sink/markdown"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sink/sqlite"
-	"github.com/sanketsudake/claude-agent-proxy/internal/sink/terminal"
+	"github.com/sanketsudake/cc-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/config"
+	"github.com/sanketsudake/cc-proxy/internal/cost"
+	"github.com/sanketsudake/cc-proxy/internal/proxy"
+	"github.com/sanketsudake/cc-proxy/internal/sink"
+	"github.com/sanketsudake/cc-proxy/internal/sink/clickhouse"
+	"github.com/sanketsudake/cc-proxy/internal/sink/loki"
+	"github.com/sanketsudake/cc-proxy/internal/sink/markdown"
+	"github.com/sanketsudake/cc-proxy/internal/sink/sqlite"
+	"github.com/sanketsudake/cc-proxy/internal/sink/terminal"
 )
 
 func run(cfg config.Config, logger *slog.Logger) error {
