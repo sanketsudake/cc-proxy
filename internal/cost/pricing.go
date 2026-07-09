@@ -37,12 +37,22 @@ type Estimator struct {
 	prefixes []string // sorted longest-first for prefix matching
 }
 
-// NewEstimator merges config overrides (same prefix-key scheme) over defaults.
+// NewEstimator merges config overrides (same prefix-key scheme) over defaults
+// and normalizes the cache-price fallbacks, so Estimate is pure lookup.
 func NewEstimator(overrides map[string]config.ModelPricing) *Estimator {
 	table := make(map[string]pricing, len(defaults)+len(overrides))
 	maps.Copy(table, defaults)
 	for k, v := range overrides {
 		table[k] = pricing{input: v.Input, output: v.Output, cacheRead: v.CacheRead, cacheWrite: v.CacheWrite}
+	}
+	for k, p := range table {
+		if p.cacheRead == 0 {
+			p.cacheRead = p.input * 0.1
+		}
+		if p.cacheWrite == 0 {
+			p.cacheWrite = p.input * 1.25
+		}
+		table[k] = p
 	}
 	prefixes := make([]string, 0, len(table))
 	for k := range table {
@@ -66,18 +76,10 @@ func (e *Estimator) Estimate(model string, u sse.Usage) (float64, bool) {
 	if !found {
 		return 0, false
 	}
-	cacheRead := p.cacheRead
-	if cacheRead == 0 {
-		cacheRead = p.input * 0.1
-	}
-	cacheWrite := p.cacheWrite
-	if cacheWrite == 0 {
-		cacheWrite = p.input * 1.25
-	}
 	const mtok = 1_000_000
 	cost := float64(u.InputTokens)*p.input/mtok +
 		float64(u.OutputTokens)*p.output/mtok +
-		float64(u.CacheReadTokens)*cacheRead/mtok +
-		float64(u.CacheCreationTokens)*cacheWrite/mtok
+		float64(u.CacheReadTokens)*p.cacheRead/mtok +
+		float64(u.CacheCreationTokens)*p.cacheWrite/mtok
 	return cost, true
 }

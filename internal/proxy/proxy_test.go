@@ -174,10 +174,14 @@ func TestHealthzServedLocally(t *testing.T) {
 		t.Error("healthz must not reach upstream")
 	}))
 	defer upstream.Close()
-	proxySrv := httptest.NewServer(newTestHandler(t, upstream.URL, func(*Capture) {}))
+	// Same wiring as run.go: healthz on the mux, proxy on everything else.
+	mux := http.NewServeMux()
+	mux.HandleFunc(HealthzPath, Healthz)
+	mux.Handle("/", newTestHandler(t, upstream.URL, func(*Capture) {}))
+	proxySrv := httptest.NewServer(mux)
 	defer proxySrv.Close()
 
-	resp, err := http.Get(proxySrv.URL + "/healthz")
+	resp, err := http.Get(proxySrv.URL + HealthzPath)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -25,14 +25,9 @@ type Batcher[T any] struct {
 	stopOnce sync.Once
 }
 
-// NewBatcher starts the age-based background flusher.
+// NewBatcher starts the age-based background flusher. size and interval must
+// be positive — config.Load defaults them; sinks pass config values through.
 func NewBatcher[T any](name string, size int, interval time.Duration, logger *slog.Logger, flush func(context.Context, []T) error) *Batcher[T] {
-	if size <= 0 {
-		size = 50
-	}
-	if interval <= 0 {
-		interval = 5 * time.Second
-	}
 	b := &Batcher[T]{size: size, interval: interval, flush: flush, logger: logger, name: name, stop: make(chan struct{})}
 	go b.loop()
 	return b

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sanketsudake/cc-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/config"
 )
 
 type fakeSink struct {
@@ -36,7 +37,7 @@ func discard() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, ni
 func TestSlowSinkDoesNotBlockOthers(t *testing.T) {
 	slow := &fakeSink{name: "slow", delay: 200 * time.Millisecond}
 	fast := &fakeSink{name: "fast"}
-	d := NewDispatcher(discard(), 8, Drop, slow, fast)
+	d := NewDispatcher(discard(), 8, config.QueuePolicyDrop, slow, fast)
 
 	start := time.Now()
 	for range 5 {
@@ -60,31 +61,24 @@ func TestSlowSinkDoesNotBlockOthers(t *testing.T) {
 }
 
 func TestDropPolicyOnFullQueue(t *testing.T) {
-	slow := &fakeSink{name: "slow", delay: time.Second}
-	d := NewDispatcher(discard(), 1, Drop, slow)
+	slow := &fakeSink{name: "slow", delay: 300 * time.Millisecond}
+	d := NewDispatcher(discard(), 1, config.QueuePolicyDrop, slow)
 	for range 10 {
 		d.Dispatch(&capture.Record{}) // must never block
 	}
-	if slow.dropped(d) == 0 {
-		t.Error("expected drops with a full queue")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = d.Close(ctx)
-}
-
-func (f *fakeSink) dropped(d *Dispatcher) int64 {
-	for _, w := range d.workers {
-		if w.sink == f {
-			return w.dropped
-		}
+	// Queue capacity 1 + one in-flight write means most of the 10 dispatches
+	// were dropped rather than delivered.
+	if got := slow.written.Load(); got >= 10 {
+		t.Errorf("writes = %d, expected drops with a full queue", got)
 	}
-	return 0
 }
 
 func TestCloseDrainsAndFlushes(t *testing.T) {
 	s := &fakeSink{name: "s", delay: 10 * time.Millisecond}
-	d := NewDispatcher(discard(), 64, Drop, s)
+	d := NewDispatcher(discard(), 64, config.QueuePolicyDrop, s)
 	for range 10 {
 		d.Dispatch(&capture.Record{})
 	}
@@ -103,7 +97,7 @@ func TestCloseDrainsAndFlushes(t *testing.T) {
 
 func TestSinkErrorDoesNotPropagate(t *testing.T) {
 	s := &fakeSink{name: "failing", err: errors.New("backend down")}
-	d := NewDispatcher(discard(), 8, Drop, s)
+	d := NewDispatcher(discard(), 8, config.QueuePolicyDrop, s)
 	d.Dispatch(&capture.Record{}) // must not panic or block
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

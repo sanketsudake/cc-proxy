@@ -5,11 +5,37 @@ package audit
 import (
 	"encoding/json"
 	"sort"
+	"strconv"
 )
 
 // EstTokens is a rough display-only token estimate (~4 bytes/token). Real
 // input tokens come from the response usage.
 func EstTokens(bytes int) int { return (bytes + 2) / 4 }
+
+// Comma renders n with thousands separators (1234567 -> "1,234,567").
+// Shared by the terminal and markdown renderers of the audit table.
+func Comma(n int) string {
+	s := strconv.Itoa(n)
+	if len(s) <= 3 {
+		return s
+	}
+	var out []byte
+	for i, c := range []byte(s) {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			out = append(out, ',')
+		}
+		out = append(out, c)
+	}
+	return string(out)
+}
+
+// Pct is part as a percentage of total, safe for total == 0.
+func Pct(part, total int) float64 {
+	if total == 0 {
+		return 0
+	}
+	return float64(part) / float64(total) * 100
+}
 
 // ToolStat is one tool definition's size contribution.
 type ToolStat struct {
@@ -20,15 +46,14 @@ type ToolStat struct {
 
 // Result is the size breakdown of one request.
 type Result struct {
-	Model        string
-	Stream       bool
-	AccountID    string // account_uuid from metadata.user_id, when sent
-	DeviceID     string
-	Tools        []ToolStat // sorted by bytes, descending
-	ToolsBytes   int
-	SystemBytes  int
-	TotalBytes   int
-	MessageCount int
+	Model          string
+	Stream         bool
+	MetadataUserID string     // raw metadata.user_id string; capture decodes it
+	Tools          []ToolStat // sorted by bytes, descending
+	ToolsBytes     int
+	SystemBytes    int
+	TotalBytes     int
+	MessageCount   int
 }
 
 // request mirrors just the fields of an Anthropic /v1/messages body we
@@ -42,14 +67,6 @@ type request struct {
 	Metadata *struct {
 		UserID string `json:"user_id"`
 	} `json:"metadata"`
-}
-
-// userID is what Claude Code packs into metadata.user_id: a JSON object
-// serialized as a string. Other clients may send anything (or nothing)
-// there, so parsing is strictly best-effort.
-type userID struct {
-	DeviceID    string `json:"device_id"`
-	AccountUUID string `json:"account_uuid"`
 }
 
 type toolName struct {
@@ -67,12 +84,8 @@ func Analyze(body []byte) Result {
 	res.Model = req.Model
 	res.Stream = req.Stream
 	res.MessageCount = len(req.Messages)
-	if req.Metadata != nil && req.Metadata.UserID != "" {
-		var uid userID
-		if err := json.Unmarshal([]byte(req.Metadata.UserID), &uid); err == nil {
-			res.AccountID = uid.AccountUUID
-			res.DeviceID = uid.DeviceID
-		}
+	if req.Metadata != nil {
+		res.MetadataUserID = req.Metadata.UserID
 	}
 	if req.System != nil {
 		res.SystemBytes = len(req.System)

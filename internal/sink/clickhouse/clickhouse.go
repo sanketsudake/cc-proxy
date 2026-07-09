@@ -8,10 +8,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/sanketsudake/cc-proxy/internal/capture"
@@ -61,10 +61,9 @@ type row struct {
 type Sink struct {
 	batcher   *sink.Batcher[row]
 	client    *http.Client
-	baseURL   string
+	execURL   string // bare HTTP endpoint for DDL statements
 	insertURL string
-	username  string
-	password  string
+	auth      map[string]string
 }
 
 // migrations are columns added after the initial DDL, applied idempotently
@@ -82,49 +81,30 @@ func New(cfg config.ClickHouseSink, logger *slog.Logger) *Sink {
 	query := fmt.Sprintf("INSERT INTO %s.%s FORMAT JSONEachRow", cfg.Database, cfg.Table)
 	s := &Sink{
 		client:    &http.Client{Timeout: 30 * time.Second},
-		baseURL:   cfg.URL,
+		execURL:   cfg.URL + "/",
 		insertURL: cfg.URL + "/?query=" + url.QueryEscape(query),
-		username:  cfg.Username,
-		password:  cfg.Password,
 	}
-	s.migrate(cfg, logger)
+	if cfg.Username != "" {
+		s.auth = map[string]string{headerUser: cfg.Username, headerKey: cfg.Password}
+	}
+	// Best-effort and asynchronous: a fresh table from the compose init
+	// script already has the columns, and a slow/unreachable backend must
+	// not delay proxy startup. The first failure aborts the rest.
+	go s.migrate(cfg, logger)
 	s.batcher = sink.NewBatcher("clickhouse", cfg.BatchSize, cfg.FlushInterval.Std(), logger, s.send)
 	return s
 }
 
-// migrate applies the ALTERs best-effort; a down backend is not an error —
-// a table created fresh by the compose init script already has the columns.
 func (s *Sink) migrate(cfg config.ClickHouseSink, logger *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for _, m := range migrations {
 		stmt := fmt.Sprintf("ALTER TABLE %s.%s %s", cfg.Database, cfg.Table, m)
-		if err := s.exec(ctx, stmt); err != nil {
+		if err := sink.PostChecked(ctx, s.client, s.execURL, "text/plain", strings.NewReader(stmt), s.auth); err != nil {
 			logger.Debug("clickhouse migration skipped", "stmt", stmt, "err", err)
 			return
 		}
 	}
-}
-
-func (s *Sink) exec(ctx context.Context, query string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/", bytes.NewReader([]byte(query)))
-	if err != nil {
-		return err
-	}
-	if s.username != "" {
-		req.Header.Set(headerUser, s.username)
-		req.Header.Set(headerKey, s.password)
-	}
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return fmt.Errorf("clickhouse exec status %d: %s", resp.StatusCode, msg)
-	}
-	return nil
 }
 
 func (s *Sink) Name() string { return "clickhouse" }
@@ -174,25 +154,7 @@ func (s *Sink) send(ctx context.Context, batch []row) error {
 			return err
 		}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.insertURL, &body)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/x-ndjson")
-	if s.username != "" {
-		req.Header.Set(headerUser, s.username)
-		req.Header.Set(headerKey, s.password)
-	}
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return fmt.Errorf("clickhouse insert status %d: %s", resp.StatusCode, msg)
-	}
-	return nil
+	return sink.PostChecked(ctx, s.client, s.insertURL, "application/x-ndjson", &body, s.auth)
 }
 
 func (s *Sink) Close(ctx context.Context) error {

@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -18,6 +19,22 @@ const (
 	HeaderRetryCount = "X-Stainless-Retry-Count"
 )
 
+// userID is what Claude Code packs into metadata.user_id: a JSON object
+// serialized as a string. Other clients may send anything (or nothing)
+// there, so parsing is strictly best-effort.
+type userID struct {
+	DeviceID    string `json:"device_id"`
+	AccountUUID string `json:"account_uuid"`
+}
+
+func parseUserID(raw string) userID {
+	var uid userID
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &uid)
+	}
+	return uid
+}
+
 // Builder converts raw proxy captures into Records.
 type Builder struct {
 	Estimator *cost.Estimator
@@ -26,6 +43,7 @@ type Builder struct {
 // Build parses, audits, and prices one exchange.
 func (b *Builder) Build(c *proxy.Capture) *Record {
 	a := audit.Analyze(c.RequestBody)
+	uid := parseUserID(a.MetadataUserID)
 	resp := sse.Decode(c.ResponseBody, c.ResponseHeader.Get("Content-Type"))
 
 	model := resp.Model
@@ -48,8 +66,8 @@ func (b *Builder) Build(c *proxy.Capture) *Record {
 		SessionID:     c.RequestHeader.Get(HeaderSessionID),
 		App:           c.RequestHeader.Get(HeaderApp),
 		ClientVersion: c.RequestHeader.Get(HeaderUserAgent),
-		AccountID:     a.AccountID,
-		DeviceID:      a.DeviceID,
+		AccountID:     uid.AccountUUID,
+		DeviceID:      uid.DeviceID,
 
 		SystemBytes:  a.SystemBytes,
 		TotalBytes:   a.TotalBytes,

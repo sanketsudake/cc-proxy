@@ -13,7 +13,7 @@ import (
 // closes the body, including on client disconnect, so the capture never leaks.
 type teeBody struct {
 	inner   io.ReadCloser
-	cap     *Capture
+	capt    *Capture
 	buf     bytes.Buffer
 	maxByte int64
 	fire    func(*Capture)
@@ -24,13 +24,13 @@ type teeBody struct {
 func (t *teeBody) Read(p []byte) (int, error) {
 	n, err := t.inner.Read(p)
 	if n > 0 {
-		if t.cap.FirstByte.IsZero() {
-			t.cap.FirstByte = time.Now()
+		if t.capt.FirstByte.IsZero() {
+			t.capt.FirstByte = time.Now()
 		}
 		if int64(t.buf.Len())+int64(n) <= t.maxByte {
 			t.buf.Write(p[:n])
 		} else {
-			t.cap.Truncated = true
+			t.capt.Truncated = true
 		}
 	}
 	if err == io.EOF {
@@ -42,13 +42,13 @@ func (t *teeBody) Read(p []byte) (int, error) {
 func (t *teeBody) Close() error {
 	err := t.inner.Close()
 	t.once.Do(func() {
-		t.cap.End = time.Now()
+		t.capt.End = time.Now()
 		if !t.sawEOF {
 			// Client went away (or upstream aborted) before the stream ended.
-			t.cap.Truncated = true
+			t.capt.Truncated = true
 		}
-		t.cap.ResponseBody = t.buf.Bytes()
-		t.fire(t.cap)
+		t.capt.ResponseBody = t.buf.Bytes()
+		t.fire(t.capt)
 	})
 	return err
 }

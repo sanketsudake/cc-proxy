@@ -53,12 +53,12 @@ Get the weather
 
 ```json
 {
+  "type": "object",
   "properties": {
     "city": {
       "type": "string"
     }
-  },
-  "type": "object"
+  }
 }
 ```
 

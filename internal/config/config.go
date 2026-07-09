@@ -4,6 +4,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -37,10 +38,6 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 		return fmt.Errorf("invalid duration value %v", v)
 	}
 	return nil
-}
-
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Duration(d).String())
 }
 
 // ModelPricing is USD per million tokens. CacheRead/CacheWrite default to
@@ -227,7 +224,9 @@ func Load(args []string, stderr io.Writer) (Config, error) {
 			return cfg, err
 		}
 	}
-	applyEnv(&cfg)
+	if err := applyEnv(&cfg); err != nil {
+		return cfg, err
+	}
 
 	// Flags win last; only apply the ones explicitly set.
 	fs.Visit(func(f *flag.Flag) {
@@ -258,9 +257,10 @@ func Load(args []string, stderr io.Writer) (Config, error) {
 	return cfg, nil
 }
 
-// resolvePaths fills the file-sink locations that were not set explicitly,
-// anchoring them under DataDir (default ~/.cc-proxy) so behavior does not
-// depend on the process's working directory.
+// resolvePaths fills values that could not be defaulted statically: file-sink
+// locations depend on DataDir (which any precedence layer may override), and
+// batching knobs left at zero take the shared defaults so sinks never have to
+// re-default them.
 func (c *Config) resolvePaths() {
 	if c.DataDir == "" {
 		home, err := os.UserHomeDir()
@@ -274,6 +274,24 @@ func (c *Config) resolvePaths() {
 	}
 	if c.Sinks.SQLite.Path == "" {
 		c.Sinks.SQLite.Path = filepath.Join(c.DataDir, DefaultDBFileName)
+	}
+
+	for _, b := range []*struct {
+		size     *int
+		interval *Duration
+	}{
+		{&c.Sinks.ClickHouse.BatchSize, &c.Sinks.ClickHouse.FlushInterval},
+		{&c.Sinks.Loki.BatchSize, &c.Sinks.Loki.FlushInterval},
+	} {
+		if *b.size <= 0 {
+			*b.size = DefaultBatchSize
+		}
+		if *b.interval <= 0 {
+			*b.interval = DefaultFlushInterval
+		}
+	}
+	if c.Sinks.Loki.MaxLineBytes <= 0 {
+		c.Sinks.Loki.MaxLineBytes = DefaultLokiMaxLineBytes
 	}
 }
 
@@ -320,26 +338,30 @@ func loadFile(path string, cfg *Config) error {
 	return nil
 }
 
-func applyEnv(cfg *Config) {
-	cfg.Port = envInt(EnvPort, cfg.Port)
+// applyEnv overlays CAP_* variables. Malformed values are errors, not silent
+// fallbacks — the env tier should fail as loudly as flags and the config file.
+func applyEnv(cfg *Config) error {
+	var errs []error
+	cfg.Port = envInt(EnvPort, cfg.Port, &errs)
 	cfg.UpstreamURL = envStr(EnvUpstreamURL, cfg.UpstreamURL)
 	cfg.LogLevel = envStr(EnvLogLevel, cfg.LogLevel)
 	cfg.LogFormat = envStr(EnvLogFormat, cfg.LogFormat)
-	cfg.Quiet = envBool(EnvQuiet, cfg.Quiet)
+	cfg.Quiet = envBool(EnvQuiet, cfg.Quiet, &errs)
 	cfg.DataDir = envStr(EnvDataDir, cfg.DataDir)
-	cfg.QueueSize = envInt(EnvQueueSize, cfg.QueueSize)
+	cfg.QueueSize = envInt(EnvQueueSize, cfg.QueueSize, &errs)
 	cfg.QueuePolicy = envStr(EnvQueuePolicy, cfg.QueuePolicy)
 
-	cfg.Sinks.Markdown.Enabled = envBool(EnvMarkdownEnabled, cfg.Sinks.Markdown.Enabled)
+	cfg.Sinks.Markdown.Enabled = envBool(EnvMarkdownEnabled, cfg.Sinks.Markdown.Enabled, &errs)
 	cfg.Sinks.Markdown.Dir = envStr(EnvMarkdownDir, cfg.Sinks.Markdown.Dir)
-	cfg.Sinks.SQLite.Enabled = envBool(EnvSQLiteEnabled, cfg.Sinks.SQLite.Enabled)
+	cfg.Sinks.SQLite.Enabled = envBool(EnvSQLiteEnabled, cfg.Sinks.SQLite.Enabled, &errs)
 	cfg.Sinks.SQLite.Path = envStr(EnvSQLitePath, cfg.Sinks.SQLite.Path)
-	cfg.Sinks.ClickHouse.Enabled = envBool(EnvClickHouseEnabled, cfg.Sinks.ClickHouse.Enabled)
+	cfg.Sinks.ClickHouse.Enabled = envBool(EnvClickHouseEnabled, cfg.Sinks.ClickHouse.Enabled, &errs)
 	cfg.Sinks.ClickHouse.URL = envStr(EnvClickHouseURL, cfg.Sinks.ClickHouse.URL)
 	cfg.Sinks.ClickHouse.Username = envStr(EnvClickHouseUsername, cfg.Sinks.ClickHouse.Username)
 	cfg.Sinks.ClickHouse.Password = envStr(EnvClickHousePassword, cfg.Sinks.ClickHouse.Password)
-	cfg.Sinks.Loki.Enabled = envBool(EnvLokiEnabled, cfg.Sinks.Loki.Enabled)
+	cfg.Sinks.Loki.Enabled = envBool(EnvLokiEnabled, cfg.Sinks.Loki.Enabled, &errs)
 	cfg.Sinks.Loki.URL = envStr(EnvLokiURL, cfg.Sinks.Loki.URL)
+	return errors.Join(errs...)
 }
 
 func envStr(key, def string) string {
@@ -349,20 +371,28 @@ func envStr(key, def string) string {
 	return def
 }
 
-func envInt(key string, def int) int {
-	if v, ok := os.LookupEnv(key); ok {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
+func envInt(key string, def int, errs *[]error) int {
+	v, ok := os.LookupEnv(key)
+	if !ok {
+		return def
 	}
-	return def
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		*errs = append(*errs, fmt.Errorf("%s=%q is not an integer", key, v))
+		return def
+	}
+	return n
 }
 
-func envBool(key string, def bool) bool {
-	if v, ok := os.LookupEnv(key); ok {
-		if b, err := strconv.ParseBool(v); err == nil {
-			return b
-		}
+func envBool(key string, def bool, errs *[]error) bool {
+	v, ok := os.LookupEnv(key)
+	if !ok {
+		return def
 	}
-	return def
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		*errs = append(*errs, fmt.Errorf("%s=%q is not a boolean", key, v))
+		return def
+	}
+	return b
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sanketsudake/cc-proxy/internal/capture"
+	"github.com/sanketsudake/cc-proxy/internal/config"
 )
 
 // Sink consumes capture records. Write is called from a single dedicated
@@ -20,33 +21,34 @@ type Sink interface {
 	Close(ctx context.Context) error
 }
 
-// Policy controls behavior when a sink's queue is full.
-type Policy string
-
+// Shutdown/write budgets. Deliberate ordering: a single Write may take up to
+// writeTimeout, which exceeds the shutdown drain window in run.go — on exit
+// we prefer leaving over waiting out one hung remote call, because records
+// are drop-tolerant by design.
 const (
-	Drop  Policy = "drop"  // drop the record and warn (default)
-	Block Policy = "block" // block the pipeline until there is room
+	writeTimeout      = 60 * time.Second
+	closeFlushTimeout = 15 * time.Second
 )
 
 type worker struct {
-	sink    Sink
-	queue   chan *capture.Record
-	done    chan struct{}
-	dropped int64
+	sink  Sink
+	queue chan *capture.Record
+	done  chan struct{}
 }
 
 // Dispatcher fans records out to sinks, one buffered queue + goroutine per
-// sink so a hung sink never stalls the others.
+// sink so a hung sink never stalls the others. Dispatch must be called from
+// a single goroutine (the builder stage in run.go).
 type Dispatcher struct {
 	workers  []*worker
-	policy   Policy
+	policy   string // config.QueuePolicyDrop or config.QueuePolicyBlock
 	logger   *slog.Logger
 	mu       sync.Mutex
 	lastWarn map[string]time.Time
 }
 
 // NewDispatcher starts one worker per sink.
-func NewDispatcher(logger *slog.Logger, queueSize int, policy Policy, sinks ...Sink) *Dispatcher {
+func NewDispatcher(logger *slog.Logger, queueSize int, policy string, sinks ...Sink) *Dispatcher {
 	d := &Dispatcher{policy: policy, logger: logger, lastWarn: map[string]time.Time{}}
 	for _, s := range sinks {
 		w := &worker{sink: s, queue: make(chan *capture.Record, queueSize), done: make(chan struct{})}
@@ -62,7 +64,7 @@ func (d *Dispatcher) run(w *worker) {
 		d.write(w, rec)
 	}
 	// Drained; let the sink flush.
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), closeFlushTimeout)
 	if err := w.sink.Close(ctx); err != nil {
 		d.logger.Warn("sink close failed", "sink", w.sink.Name(), "err", err)
 	}
@@ -75,7 +77,7 @@ func (d *Dispatcher) write(w *worker, rec *capture.Record) {
 			d.logger.Error("sink panicked", "sink", w.sink.Name(), "panic", r)
 		}
 	}()
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
 	if err := w.sink.Write(ctx, rec); err != nil {
 		d.warnRateLimited(w.sink.Name(), "sink write failed", err)
@@ -86,14 +88,13 @@ func (d *Dispatcher) write(w *worker, rec *capture.Record) {
 // policy: a full queue drops the record for that sink with a warning.
 func (d *Dispatcher) Dispatch(rec *capture.Record) {
 	for _, w := range d.workers {
-		if d.policy == Block {
+		if d.policy == config.QueuePolicyBlock {
 			w.queue <- rec
 			continue
 		}
 		select {
 		case w.queue <- rec:
 		default:
-			w.dropped++
 			d.warnRateLimited(w.sink.Name(), "queue full, record dropped", nil)
 		}
 	}

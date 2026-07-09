@@ -39,6 +39,15 @@ type Response struct {
 	Error      string // non-empty if the body carried an API error
 }
 
+// apiError is the error object Anthropic embeds in SSE error events and
+// JSON error bodies.
+type apiError struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
+func (e apiError) String() string { return e.Type + ": " + e.Message }
+
 type event struct {
 	Type    string `json:"type"`
 	Index   int    `json:"index"`
@@ -58,11 +67,8 @@ type event struct {
 		Thinking    string `json:"thinking"`
 		StopReason  string `json:"stop_reason"`
 	} `json:"delta"`
-	Usage *Usage `json:"usage"`
-	Error *struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
-	} `json:"error"`
+	Usage *Usage    `json:"usage"`
+	Error *apiError `json:"error"`
 }
 
 // Decode picks the right decoder from the response content type.
@@ -73,28 +79,41 @@ func Decode(body []byte, contentType string) Response {
 	return DecodeJSON(body)
 }
 
+// partialBlock accumulates a block's deltas in a strings.Builder: long
+// assistant turns arrive as thousands of small deltas, and naive string
+// concatenation would copy the accumulated text on every one.
+type partialBlock struct {
+	Block
+	text strings.Builder
+}
+
+// scanBufMax bounds one SSE line. It must be at least the proxy's response
+// capture cap (config.DefaultMaxCaptureBytes) or a single huge data: line
+// could not be decoded even though the proxy captured it.
+const scanBufMax = 64 << 20
+
 // DecodeStream reassembles an SSE stream. Unknown event and block types are
 // tolerated (Anthropic adds new ones over time) — their deltas accumulate
 // into whatever text fields they carry.
 func DecodeStream(raw []byte) Response {
 	var resp Response
-	blocks := map[int]*Block{}
+	blocks := map[int]*partialBlock{}
 	maxIdx := -1
 
+	dataPrefix := []byte("data:")
 	sc := bufio.NewScanner(bytes.NewReader(raw))
-	sc.Buffer(make([]byte, 64<<10), 16<<20)
+	sc.Buffer(make([]byte, 64<<10), scanBufMax)
 	for sc.Scan() {
-		line := sc.Text()
-		data, ok := strings.CutPrefix(line, "data:")
+		data, ok := bytes.CutPrefix(sc.Bytes(), dataPrefix)
 		if !ok {
 			continue
 		}
-		data = strings.TrimSpace(data)
-		if data == "" || data == "[DONE]" {
+		data = bytes.TrimSpace(data)
+		if len(data) == 0 || string(data) == "[DONE]" {
 			continue
 		}
 		var ev event
-		if err := json.Unmarshal([]byte(data), &ev); err != nil {
+		if err := json.Unmarshal(data, &ev); err != nil {
 			continue
 		}
 		switch ev.Type {
@@ -106,7 +125,7 @@ func DecodeStream(raw []byte) Response {
 				}
 			}
 		case "content_block_start":
-			b := &Block{Kind: "text"}
+			b := &partialBlock{Block: Block{Kind: "text"}}
 			if ev.ContentBlock != nil {
 				b.Kind = ev.ContentBlock.Type
 				b.Name = ev.ContentBlock.Name
@@ -118,7 +137,9 @@ func DecodeStream(raw []byte) Response {
 			}
 		case "content_block_delta":
 			if b, ok := blocks[ev.Index]; ok && ev.Delta != nil {
-				b.Text += ev.Delta.Text + ev.Delta.PartialJSON + ev.Delta.Thinking
+				b.text.WriteString(ev.Delta.Text)
+				b.text.WriteString(ev.Delta.PartialJSON)
+				b.text.WriteString(ev.Delta.Thinking)
 			}
 		case "message_delta":
 			if ev.Delta != nil && ev.Delta.StopReason != "" {
@@ -129,13 +150,19 @@ func DecodeStream(raw []byte) Response {
 			}
 		case "error":
 			if ev.Error != nil {
-				resp.Error = ev.Error.Type + ": " + ev.Error.Message
+				resp.Error = ev.Error.String()
 			}
 		}
 	}
+	if err := sc.Err(); err != nil && resp.Error == "" {
+		// Scanner overflow or similar: everything after the failing line is
+		// lost, so say so instead of silently returning a partial decode.
+		resp.Error = "sse decode aborted: " + err.Error()
+	}
 	for i := 0; i <= maxIdx; i++ {
 		if b, ok := blocks[i]; ok {
-			resp.Blocks = append(resp.Blocks, *b)
+			b.Text = b.text.String()
+			resp.Blocks = append(resp.Blocks, b.Block)
 		}
 	}
 	return resp
@@ -153,11 +180,8 @@ type jsonMessage struct {
 		ID       string          `json:"id"`
 		Input    json.RawMessage `json:"input"`
 	} `json:"content"`
-	Usage *Usage `json:"usage"`
-	Error *struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
-	} `json:"error"`
+	Usage *Usage    `json:"usage"`
+	Error *apiError `json:"error"`
 }
 
 // DecodeJSON handles stream:false replies and JSON error bodies.
@@ -173,7 +197,7 @@ func DecodeJSON(raw []byte) Response {
 		resp.Usage = *msg.Usage
 	}
 	if msg.Error != nil {
-		resp.Error = msg.Error.Type + ": " + msg.Error.Message
+		resp.Error = msg.Error.String()
 	}
 	for _, c := range msg.Content {
 		b := Block{Kind: c.Type, Name: c.Name, ID: c.ID}
@@ -192,6 +216,9 @@ func DecodeJSON(raw []byte) Response {
 	return resp
 }
 
+// mergeUsage overwrites only positive fields: message_start carries the
+// input-side counts while message_delta carries output_tokens, and each
+// leaves the other's fields zeroed — a plain assignment would clobber them.
 func mergeUsage(dst *Usage, src Usage) {
 	if src.InputTokens > 0 {
 		dst.InputTokens = src.InputTokens

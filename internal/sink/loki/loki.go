@@ -7,12 +7,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sanketsudake/cc-proxy/internal/capture"
 	"github.com/sanketsudake/cc-proxy/internal/config"
@@ -42,9 +41,6 @@ func New(cfg config.LokiSink, logger *slog.Logger) *Sink {
 		client:       &http.Client{Timeout: 30 * time.Second},
 		pushURL:      cfg.URL + pushPath,
 		maxLineBytes: cfg.MaxLineBytes,
-	}
-	if s.maxLineBytes <= 0 {
-		s.maxLineBytes = 16 << 10
 	}
 	s.batcher = sink.NewBatcher("loki", cfg.BatchSize, cfg.FlushInterval.Std(), logger, s.send)
 	return s
@@ -144,21 +140,7 @@ func (s *Sink) send(ctx context.Context, batch []entry) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.pushURL, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return fmt.Errorf("loki push status %d: %s", resp.StatusCode, msg)
-	}
-	return nil
+	return sink.PostChecked(ctx, s.client, s.pushURL, "application/json", bytes.NewReader(body), nil)
 }
 
 func (s *Sink) Close(ctx context.Context) error {
@@ -166,9 +148,14 @@ func (s *Sink) Close(ctx context.Context) error {
 	return nil
 }
 
+// truncate cuts s to at most n bytes on a rune boundary, so the result is
+// still valid UTF-8 inside a JSON log line.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
 	}
 	return s[:n] + "…[truncated]"
 }

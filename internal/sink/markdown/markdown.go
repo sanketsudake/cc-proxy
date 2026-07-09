@@ -1,6 +1,6 @@
 // Package markdown writes per-request files, format-compatible with the
-// original agent-proxy gist: a readable .md audit document plus the raw
-// request body as .request.txt.
+// original agent-proxy gist (gist.github.com/mattpocock/5b3d76ea21f5f698aefded47a9cea3b1):
+// a readable .md audit document plus the raw request body as .request.txt.
 package markdown
 
 import (
@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/sanketsudake/cc-proxy/internal/capture"
 )
 
 type Sink struct {
-	dir string
+	dir     string
+	mkdir   sync.Once
+	mkdirOK error
 }
 
 func New(dir string) *Sink { return &Sink{dir: dir} }
@@ -21,8 +24,9 @@ func New(dir string) *Sink { return &Sink{dir: dir} }
 func (s *Sink) Name() string { return "markdown" }
 
 func (s *Sink) Write(_ context.Context, rec *capture.Record) error {
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
-		return fmt.Errorf("create log dir: %w", err)
+	s.mkdir.Do(func() { s.mkdirOK = os.MkdirAll(s.dir, 0o755) })
+	if s.mkdirOK != nil {
+		return fmt.Errorf("create log dir: %w", s.mkdirOK)
 	}
 	base := rec.Timestamp.UTC().Format("2006-01-02T15-04-05") + "_" + rec.ID
 	if err := os.WriteFile(filepath.Join(s.dir, base+".request.txt"), rec.RawRequest, 0o644); err != nil {

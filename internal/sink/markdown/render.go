@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -11,9 +12,9 @@ import (
 	"github.com/sanketsudake/cc-proxy/internal/capture"
 )
 
-// Render produces the per-request markdown document, format-compatible with
-// the original agent-proxy gist: meta, ranked audit table, redacted headers,
-// system prompt, tool definitions, message history, decoded response.
+// Render produces the per-request markdown document: meta, ranked audit
+// table, redacted headers, system prompt, tool definitions, message history,
+// decoded response.
 func Render(rec *capture.Record) string {
 	var b strings.Builder
 
@@ -121,11 +122,8 @@ func renderAudit(b *strings.Builder, rec *capture.Record) {
 	fmt.Fprintf(b, "| tool | bytes | ~tokens | %% of request |\n")
 	fmt.Fprintf(b, "| --- | --: | --: | --: |\n")
 	for _, t := range rec.Tools {
-		pct := 0.0
-		if rec.TotalBytes > 0 {
-			pct = float64(t.Bytes) / float64(rec.TotalBytes) * 100
-		}
-		fmt.Fprintf(b, "| %s | %s | ~%s | %.1f%% |\n", t.Name, comma(t.Bytes), comma(t.ApproxTokens), pct)
+		fmt.Fprintf(b, "| %s | %s | ~%s | %.1f%% |\n",
+			t.Name, comma(t.Bytes), comma(t.ApproxTokens), audit.Pct(t.Bytes, rec.TotalBytes))
 	}
 	fmt.Fprintf(b, "\n</audit>")
 }
@@ -231,8 +229,8 @@ func renderBlock(bl contentBlock) string {
 	case "image":
 		return imagePlaceholder(bl)
 	default:
-		raw, _ := json.Marshal(bl)
-		return fenceJSON(raw)
+		pretty, _ := json.MarshalIndent(bl, "", "  ")
+		return "```json\n" + string(pretty) + "\n```"
 	}
 }
 
@@ -278,16 +276,14 @@ func renderResponse(b *strings.Builder, rec *capture.Record) {
 	fmt.Fprintf(b, "\n\n</response>")
 }
 
+// fenceJSON pretty-prints raw JSON without decoding it — json.Indent works
+// on the bytes directly, preserving key order.
 func fenceJSON(raw json.RawMessage) string {
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, raw, "", "  "); err != nil {
 		return "```\n" + string(raw) + "\n```"
 	}
-	pretty, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return "```\n" + string(raw) + "\n```"
-	}
-	return "```json\n" + string(pretty) + "\n```"
+	return "```json\n" + pretty.String() + "\n```"
 }
 
 func orUnknown(s string) string {
@@ -297,18 +293,5 @@ func orUnknown(s string) string {
 	return s
 }
 
-// comma renders n with thousands separators.
-func comma(n int) string {
-	s := fmt.Sprintf("%d", n)
-	if len(s) <= 3 {
-		return s
-	}
-	var out []byte
-	for i, c := range []byte(s) {
-		if i > 0 && (len(s)-i)%3 == 0 {
-			out = append(out, ',')
-		}
-		out = append(out, c)
-	}
-	return string(out)
-}
+// comma is a local alias for the shared thousands-separator formatter.
+var comma = audit.Comma

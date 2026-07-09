@@ -43,25 +43,30 @@ func TestAnalyzeNonJSON(t *testing.T) {
 }
 
 func TestAnalyzeMetadataUserID(t *testing.T) {
-	body := `{"model":"m","metadata":{"user_id":"{\"device_id\":\"dev-1\",\"account_uuid\":\"acct-9\",\"session_id\":\"s-1\"}"}}`
+	body := `{"model":"m","metadata":{"user_id":"{\"device_id\":\"dev-1\",\"account_uuid\":\"acct-9\"}"}}`
 	a := Analyze([]byte(body))
-	if a.AccountID != "acct-9" || a.DeviceID != "dev-1" {
-		t.Errorf("account/device = %q/%q", a.AccountID, a.DeviceID)
+	if a.MetadataUserID != `{"device_id":"dev-1","account_uuid":"acct-9"}` {
+		t.Errorf("MetadataUserID = %q", a.MetadataUserID)
+	}
+	if b := Analyze([]byte(`{"model":"m"}`)); b.MetadataUserID != "" {
+		t.Errorf("absent metadata: %q", b.MetadataUserID)
 	}
 }
 
-func TestAnalyzeMetadataAbsentOrMalformed(t *testing.T) {
-	for _, body := range []string{
-		`{"model":"m"}`,                                   // no metadata
-		`{"model":"m","metadata":{}}`,                     // no user_id
-		`{"model":"m","metadata":{"user_id":"not json"}}`, // opaque string
-		`{"model":"m","metadata":{"user_id":"[1,2,3]"}}`,  // wrong JSON shape
-		`{"model":"m","metadata":{"user_id":""}}`,         // empty
-	} {
-		a := Analyze([]byte(body))
-		if a.AccountID != "" || a.DeviceID != "" {
-			t.Errorf("body %s: expected empty attribution, got %q/%q", body, a.AccountID, a.DeviceID)
+func TestComma(t *testing.T) {
+	for n, want := range map[int]string{0: "0", 999: "999", 1000: "1,000", 1234567: "1,234,567"} {
+		if got := Comma(n); got != want {
+			t.Errorf("Comma(%d) = %q, want %q", n, got, want)
 		}
+	}
+}
+
+func TestPct(t *testing.T) {
+	if Pct(1, 0) != 0 {
+		t.Error("Pct with zero total should be 0")
+	}
+	if Pct(1, 4) != 25 {
+		t.Errorf("Pct(1,4) = %f", Pct(1, 4))
 	}
 }
 

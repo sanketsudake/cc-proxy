@@ -8,7 +8,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -41,8 +40,10 @@ func New(path string) (*Sink, error) {
 }
 
 // migrations are columns added after the initial schema. CREATE TABLE IF NOT
-// EXISTS skips existing databases, so each is applied idempotently here —
-// "duplicate column name" just means the database is already current.
+// EXISTS skips existing databases, so each is applied idempotently here.
+// Errors are deliberately ignored: "duplicate column name" means the database
+// is already current, and anything genuinely broken fails the first INSERT
+// loudly.
 var migrations = []string{
 	`ALTER TABLE requests ADD COLUMN session_id TEXT`,
 	`ALTER TABLE requests ADD COLUMN app TEXT`,
@@ -55,11 +56,7 @@ var migrations = []string{
 
 func migrate(db *sql.DB) {
 	for _, stmt := range migrations {
-		if _, err := db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-			// Anything else is unexpected but not fatal: the insert will
-			// surface a real problem loudly.
-			continue
-		}
+		_, _ = db.Exec(stmt)
 	}
 }
 
@@ -94,11 +91,17 @@ func (s *Sink) Write(ctx context.Context, rec *capture.Record) error {
 	if err != nil {
 		return fmt.Errorf("insert request: %w", err)
 	}
-	for _, t := range rec.Tools {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO request_tools (request_id, name, bytes, approx_tokens) VALUES (?,?,?,?)`,
-			rec.ID, t.Name, t.Bytes, t.ApproxTokens); err != nil {
-			return fmt.Errorf("insert tool: %w", err)
+	if len(rec.Tools) > 0 {
+		stmt, err := tx.PrepareContext(ctx,
+			`INSERT INTO request_tools (request_id, name, bytes, approx_tokens) VALUES (?,?,?,?)`)
+		if err != nil {
+			return fmt.Errorf("prepare tool insert: %w", err)
+		}
+		defer stmt.Close() //nolint:errcheck // tx rollback/commit governs
+		for _, t := range rec.Tools {
+			if _, err := stmt.ExecContext(ctx, rec.ID, t.Name, t.Bytes, t.ApproxTokens); err != nil {
+				return fmt.Errorf("insert tool: %w", err)
+			}
 		}
 	}
 	return tx.Commit()
