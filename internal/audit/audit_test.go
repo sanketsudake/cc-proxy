@@ -42,6 +42,29 @@ func TestAnalyzeNonJSON(t *testing.T) {
 	}
 }
 
+func TestAnalyzeMetadataUserID(t *testing.T) {
+	body := `{"model":"m","metadata":{"user_id":"{\"device_id\":\"dev-1\",\"account_uuid\":\"acct-9\",\"session_id\":\"s-1\"}"}}`
+	a := Analyze([]byte(body))
+	if a.AccountID != "acct-9" || a.DeviceID != "dev-1" {
+		t.Errorf("account/device = %q/%q", a.AccountID, a.DeviceID)
+	}
+}
+
+func TestAnalyzeMetadataAbsentOrMalformed(t *testing.T) {
+	for _, body := range []string{
+		`{"model":"m"}`,                                   // no metadata
+		`{"model":"m","metadata":{}}`,                     // no user_id
+		`{"model":"m","metadata":{"user_id":"not json"}}`, // opaque string
+		`{"model":"m","metadata":{"user_id":"[1,2,3]"}}`,  // wrong JSON shape
+		`{"model":"m","metadata":{"user_id":""}}`,         // empty
+	} {
+		a := Analyze([]byte(body))
+		if a.AccountID != "" || a.DeviceID != "" {
+			t.Errorf("body %s: expected empty attribution, got %q/%q", body, a.AccountID, a.DeviceID)
+		}
+	}
+}
+
 func TestAnalyzeUnnamedTool(t *testing.T) {
 	a := Analyze([]byte(`{"tools": [{"description": "no name"}]}`))
 	if len(a.Tools) != 1 || a.Tools[0].Name != "(unnamed)" {

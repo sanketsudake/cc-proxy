@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS requests (
   app TEXT,
   client_version TEXT,
   retry_count INTEGER,
+  account_id TEXT,
+  device_id TEXT,
   system_bytes INTEGER,
   tools_bytes INTEGER,
   total_bytes INTEGER,

@@ -22,6 +22,8 @@ type ToolStat struct {
 type Result struct {
 	Model        string
 	Stream       bool
+	AccountID    string // account_uuid from metadata.user_id, when sent
+	DeviceID     string
 	Tools        []ToolStat // sorted by bytes, descending
 	ToolsBytes   int
 	SystemBytes  int
@@ -37,6 +39,17 @@ type request struct {
 	System   json.RawMessage   `json:"system"`
 	Tools    []json.RawMessage `json:"tools"`
 	Messages []json.RawMessage `json:"messages"`
+	Metadata *struct {
+		UserID string `json:"user_id"`
+	} `json:"metadata"`
+}
+
+// userID is what Claude Code packs into metadata.user_id: a JSON object
+// serialized as a string. Other clients may send anything (or nothing)
+// there, so parsing is strictly best-effort.
+type userID struct {
+	DeviceID    string `json:"device_id"`
+	AccountUUID string `json:"account_uuid"`
 }
 
 type toolName struct {
@@ -54,6 +67,13 @@ func Analyze(body []byte) Result {
 	res.Model = req.Model
 	res.Stream = req.Stream
 	res.MessageCount = len(req.Messages)
+	if req.Metadata != nil && req.Metadata.UserID != "" {
+		var uid userID
+		if err := json.Unmarshal([]byte(req.Metadata.UserID), &uid); err == nil {
+			res.AccountID = uid.AccountUUID
+			res.DeviceID = uid.DeviceID
+		}
+	}
 	if req.System != nil {
 		res.SystemBytes = len(req.System)
 	}

@@ -37,6 +37,8 @@ func TestWriteAndQuery(t *testing.T) {
 		SessionID:  "sess-abc",
 		App:        "cli",
 		RetryCount: 1,
+		AccountID:  "acct-9",
+		DeviceID:   "dev-1",
 	}
 	if err := s.Write(context.Background(), rec); err != nil {
 		t.Fatal(err)
@@ -72,13 +74,13 @@ func TestWriteAndQuery(t *testing.T) {
 		t.Errorf("tool rows = %d, want 2", tools)
 	}
 
-	var session, app string
+	var session, app, account string
 	var retries int
-	if err := s.db.QueryRow(`SELECT session_id, app, retry_count FROM requests WHERE id = 'req-1'`).Scan(&session, &app, &retries); err != nil {
+	if err := s.db.QueryRow(`SELECT session_id, app, retry_count, account_id FROM requests WHERE id = 'req-1'`).Scan(&session, &app, &retries, &account); err != nil {
 		t.Fatal(err)
 	}
-	if session != "sess-abc" || app != "cli" || retries != 1 {
-		t.Errorf("attribution = %s/%s/%d", session, app, retries)
+	if session != "sess-abc" || app != "cli" || retries != 1 || account != "acct-9" {
+		t.Errorf("attribution = %s/%s/%d/%s", session, app, retries, account)
 	}
 }
 
@@ -94,7 +96,7 @@ func TestMigrateOldDatabase(t *testing.T) {
 	if _, err := old.db.Exec(`DROP INDEX idx_requests_session`); err != nil {
 		t.Fatal(err)
 	}
-	for _, col := range []string{"session_id", "app", "client_version", "retry_count"} {
+	for _, col := range []string{"session_id", "app", "client_version", "retry_count", "account_id", "device_id"} {
 		if _, err := old.db.Exec(`ALTER TABLE requests DROP COLUMN ` + col); err != nil {
 			t.Fatal(err)
 		}

@@ -48,6 +48,8 @@ var migrations = []string{
 	`ALTER TABLE requests ADD COLUMN app TEXT`,
 	`ALTER TABLE requests ADD COLUMN client_version TEXT`,
 	`ALTER TABLE requests ADD COLUMN retry_count INTEGER`,
+	`ALTER TABLE requests ADD COLUMN account_id TEXT`,
+	`ALTER TABLE requests ADD COLUMN device_id TEXT`,
 	`CREATE INDEX IF NOT EXISTS idx_requests_session ON requests(session_id)`,
 }
 
@@ -75,15 +77,15 @@ func (s *Sink) Write(ctx context.Context, rec *capture.Record) error {
 
 	_, err = tx.ExecContext(ctx, `INSERT OR REPLACE INTO requests (
 		id, ts, endpoint, method, model, status, latency_ms, ttft_ms, stream, truncated,
-		session_id, app, client_version, retry_count,
+		session_id, app, client_version, retry_count, account_id, device_id,
 		system_bytes, tools_bytes, total_bytes, message_count,
 		stop_reason, response_error,
 		input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd,
 		headers_json, raw_request, response_json
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		rec.ID, rec.Timestamp.UTC().Format(time.RFC3339Nano), rec.Endpoint, rec.Method, rec.Model,
 		rec.StatusCode, rec.LatencyMS, rec.TTFTMS, rec.Stream, rec.Truncated,
-		rec.SessionID, rec.App, rec.ClientVersion, rec.RetryCount,
+		rec.SessionID, rec.App, rec.ClientVersion, rec.RetryCount, rec.AccountID, rec.DeviceID,
 		rec.SystemBytes, rec.ToolsBytes, rec.TotalBytes, rec.MessageCount,
 		rec.StopReason, rec.ResponseError,
 		rec.Usage.InputTokens, rec.Usage.OutputTokens, rec.Usage.CacheReadTokens, rec.Usage.CacheCreationTokens,

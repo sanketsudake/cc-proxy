@@ -40,6 +40,8 @@ func (b *Builder) Build(c *proxy.Capture) *Record {
 		SessionID:     c.RequestHeader.Get("X-Claude-Code-Session-Id"),
 		App:           c.RequestHeader.Get("X-App"),
 		ClientVersion: c.RequestHeader.Get("User-Agent"),
+		AccountID:     a.AccountID,
+		DeviceID:      a.DeviceID,
 
 		SystemBytes:  a.SystemBytes,
 		TotalBytes:   a.TotalBytes,

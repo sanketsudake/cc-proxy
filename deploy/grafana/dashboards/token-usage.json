@@ -85,7 +85,7 @@
           "refId": "A",
           "editorType": "sql",
           "format": 1,
-          "rawSql": "SELECT session_id, any(app) AS app, min(ts) AS started, max(ts) AS last_seen, count() AS requests, sum(input_tokens + cache_read_tokens + cache_creation_tokens) AS input_tokens, sum(output_tokens) AS output_tokens, round(sum(cost_usd), 4) AS est_cost_usd, countIf(retry_count > 0) AS retried_requests FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime AND session_id != '' GROUP BY session_id ORDER BY last_seen DESC LIMIT 50"
+          "rawSql": "SELECT session_id, any(app) AS app, any(account_id) AS account, min(ts) AS started, max(ts) AS last_seen, count() AS requests, sum(input_tokens + cache_read_tokens + cache_creation_tokens) AS input_tokens, sum(output_tokens) AS output_tokens, round(sum(cost_usd), 4) AS est_cost_usd, countIf(retry_count > 0) AS retried_requests FROM claude.requests WHERE ts >= $__fromTime AND ts <= $__toTime AND session_id != '' GROUP BY session_id ORDER BY last_seen DESC LIMIT 50"
         }
       ]
     }

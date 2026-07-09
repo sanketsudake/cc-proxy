@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS claude.requests (
   app LowCardinality(String),
   client_version LowCardinality(String),
   retry_count UInt8,
+  account_id LowCardinality(String),
+  device_id LowCardinality(String),
   system_bytes UInt32,
   tools_bytes UInt32,
   total_bytes UInt32,

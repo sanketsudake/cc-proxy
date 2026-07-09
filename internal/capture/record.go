@@ -35,6 +35,12 @@ type Record struct {
 	ClientVersion string // User-Agent, e.g. "claude-cli/2.1.204 (external, cli)"
 	RetryCount    int    // X-Stainless-Retry-Count: >0 means the SDK retried
 
+	// From the request body's metadata.user_id, when present (empty for
+	// clients that don't send it). AccountID distinguishes accounts —
+	// e.g. personal vs work profiles sharing one proxy.
+	AccountID string
+	DeviceID  string
+
 	Headers map[string]string // redacted
 
 	// Request-side audit

@@ -92,6 +92,9 @@ func renderMeta(b *strings.Builder, rec *capture.Record) {
 		}
 		fmt.Fprintf(b, "\n")
 	}
+	if rec.AccountID != "" {
+		fmt.Fprintf(b, "- **account**: %s\n", rec.AccountID)
+	}
 	if rec.RetryCount > 0 {
 		fmt.Fprintf(b, "- **sdk retry**: attempt %d\n", rec.RetryCount)
 	}

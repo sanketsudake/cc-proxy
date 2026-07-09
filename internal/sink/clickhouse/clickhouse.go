@@ -36,6 +36,8 @@ type row struct {
 	App                 string   `json:"app"`
 	ClientVersion       string   `json:"client_version"`
 	RetryCount          int      `json:"retry_count"`
+	AccountID           string   `json:"account_id"`
+	DeviceID            string   `json:"device_id"`
 	SystemBytes         int      `json:"system_bytes"`
 	ToolsBytes          int      `json:"tools_bytes"`
 	TotalBytes          int      `json:"total_bytes"`
@@ -66,6 +68,8 @@ var migrations = []string{
 	"ADD COLUMN IF NOT EXISTS app LowCardinality(String)",
 	"ADD COLUMN IF NOT EXISTS client_version LowCardinality(String)",
 	"ADD COLUMN IF NOT EXISTS retry_count UInt8",
+	"ADD COLUMN IF NOT EXISTS account_id LowCardinality(String)",
+	"ADD COLUMN IF NOT EXISTS device_id LowCardinality(String)",
 }
 
 func New(cfg config.ClickHouseSink, logger *slog.Logger) *Sink {
@@ -135,6 +139,8 @@ func (s *Sink) Write(ctx context.Context, rec *capture.Record) error {
 		App:                 rec.App,
 		ClientVersion:       rec.ClientVersion,
 		RetryCount:          rec.RetryCount,
+		AccountID:           rec.AccountID,
+		DeviceID:            rec.DeviceID,
 		SystemBytes:         rec.SystemBytes,
 		ToolsBytes:          rec.ToolsBytes,
 		TotalBytes:          rec.TotalBytes,
