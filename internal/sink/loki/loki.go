@@ -52,6 +52,9 @@ type line struct {
 	ID           string  `json:"id"`
 	Endpoint     string  `json:"endpoint"`
 	Model        string  `json:"model"`
+	SessionID    string  `json:"session_id,omitempty"`
+	App          string  `json:"app,omitempty"`
+	RetryCount   int     `json:"retry_count,omitempty"`
 	Status       int     `json:"status"`
 	LatencyMS    int64   `json:"latency_ms"`
 	TTFTMS       int64   `json:"ttft_ms"`
@@ -72,6 +75,9 @@ func (s *Sink) Write(ctx context.Context, rec *capture.Record) error {
 		ID:           rec.ID,
 		Endpoint:     rec.Endpoint,
 		Model:        rec.Model,
+		SessionID:    rec.SessionID,
+		App:          rec.App,
+		RetryCount:   rec.RetryCount,
 		Status:       rec.StatusCode,
 		LatencyMS:    rec.LatencyMS,
 		TTFTMS:       rec.TTFTMS,

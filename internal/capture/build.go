@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/sanketsudake/cc-proxy/internal/audit"
@@ -36,6 +37,10 @@ func (b *Builder) Build(c *proxy.Capture) *Record {
 		Truncated:  c.Truncated,
 		Headers:    RedactHeaders(c.RequestHeader),
 
+		SessionID:     c.RequestHeader.Get("X-Claude-Code-Session-Id"),
+		App:           c.RequestHeader.Get("X-App"),
+		ClientVersion: c.RequestHeader.Get("User-Agent"),
+
 		SystemBytes:  a.SystemBytes,
 		TotalBytes:   a.TotalBytes,
 		Tools:        a.Tools,
@@ -50,6 +55,9 @@ func (b *Builder) Build(c *proxy.Capture) *Record {
 	}
 	if !c.FirstByte.IsZero() {
 		rec.TTFTMS = c.FirstByte.Sub(c.Start).Milliseconds()
+	}
+	if v := c.RequestHeader.Get("X-Stainless-Retry-Count"); v != "" {
+		rec.RetryCount, _ = strconv.Atoi(v)
 	}
 	if b.Estimator != nil {
 		rec.CostUSD, rec.CostKnown = b.Estimator.Estimate(model, resp.Usage)

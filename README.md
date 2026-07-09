@@ -52,6 +52,7 @@ Claude Code ──HTTP──> proxy (:8787) ──HTTPS──> api.anthropic.com
                                  terminal  markdown   sqlite  clickhouse  loki
 ```
 
+Every capture is attributed to its Claude Code session: the proxy records `X-Claude-Code-Session-Id`, `X-App`, the client version (`User-Agent`), and `X-Stainless-Retry-Count`, so concurrent sessions from different terminals stay distinguishable in every sink.
 The hot path only appends bytes to a memory buffer; all parsing and sink I/O happens in worker goroutines after the response completes.
 Each sink gets its own buffered queue and goroutine, so a hung backend never stalls proxying or the other sinks.
 Credential headers (`authorization`, `x-api-key`, `api-key`, `cookie`) are redacted before any record leaves the pipeline.
@@ -96,6 +97,12 @@ All cost figures are estimates — prices drift, override them when they do.
 sqlite3 cc-proxy.db \
   "SELECT model, count(*), sum(input_tokens + cache_read_tokens), round(sum(cost_usd), 4)
    FROM requests GROUP BY model"
+
+# Per-session breakdown (which terminal/session spent what)
+sqlite3 cc-proxy.db \
+  "SELECT substr(session_id, 1, 8) AS session, count(*) AS reqs,
+          sum(output_tokens) AS out_tokens, round(sum(cost_usd), 4) AS cost
+   FROM requests WHERE session_id != '' GROUP BY session_id ORDER BY cost DESC"
 ```
 
 **ClickHouse** — the analytics workhorse:

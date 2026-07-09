@@ -23,8 +23,16 @@ func New(out io.Writer) *Sink { return &Sink{Out: out} }
 func (s *Sink) Name() string { return "terminal" }
 
 func (s *Sink) Write(_ context.Context, rec *capture.Record) error {
-	fmt.Fprintf(s.Out, "\n[cc-proxy] %s %s · status %d · %d tools · %s tool bytes\n",
-		rec.Model, rec.Endpoint, rec.StatusCode, len(rec.Tools), formatInt(rec.ToolsBytes))
+	session := ""
+	if len(rec.SessionID) >= 8 {
+		session = " · session " + rec.SessionID[:8]
+	}
+	retry := ""
+	if rec.RetryCount > 0 {
+		retry = fmt.Sprintf(" · RETRY %d", rec.RetryCount)
+	}
+	fmt.Fprintf(s.Out, "\n[cc-proxy] %s %s · status %d · %d tools · %s tool bytes%s%s\n",
+		rec.Model, rec.Endpoint, rec.StatusCode, len(rec.Tools), formatInt(rec.ToolsBytes), session, retry)
 
 	tw := tabwriter.NewWriter(s.Out, 2, 4, 2, ' ', 0)
 	shown := rec.Tools

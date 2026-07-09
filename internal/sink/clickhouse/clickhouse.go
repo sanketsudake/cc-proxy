@@ -32,6 +32,10 @@ type row struct {
 	TTFTMS              int64    `json:"ttft_ms"`
 	Stream              uint8    `json:"stream"`
 	Truncated           uint8    `json:"truncated"`
+	SessionID           string   `json:"session_id"`
+	App                 string   `json:"app"`
+	ClientVersion       string   `json:"client_version"`
+	RetryCount          int      `json:"retry_count"`
 	SystemBytes         int      `json:"system_bytes"`
 	ToolsBytes          int      `json:"tools_bytes"`
 	TotalBytes          int      `json:"total_bytes"`
@@ -49,21 +53,68 @@ type row struct {
 type Sink struct {
 	batcher   *sink.Batcher[row]
 	client    *http.Client
+	baseURL   string
 	insertURL string
 	username  string
 	password  string
+}
+
+// migrations are columns added after the initial DDL, applied idempotently
+// at startup so tables created by an older deploy keep accepting inserts.
+var migrations = []string{
+	"ADD COLUMN IF NOT EXISTS session_id String",
+	"ADD COLUMN IF NOT EXISTS app LowCardinality(String)",
+	"ADD COLUMN IF NOT EXISTS client_version LowCardinality(String)",
+	"ADD COLUMN IF NOT EXISTS retry_count UInt8",
 }
 
 func New(cfg config.ClickHouseSink, logger *slog.Logger) *Sink {
 	query := fmt.Sprintf("INSERT INTO %s.%s FORMAT JSONEachRow", cfg.Database, cfg.Table)
 	s := &Sink{
 		client:    &http.Client{Timeout: 30 * time.Second},
+		baseURL:   cfg.URL,
 		insertURL: cfg.URL + "/?query=" + url.QueryEscape(query),
 		username:  cfg.Username,
 		password:  cfg.Password,
 	}
+	s.migrate(cfg, logger)
 	s.batcher = sink.NewBatcher("clickhouse", cfg.BatchSize, cfg.FlushInterval.Std(), logger, s.send)
 	return s
+}
+
+// migrate applies the ALTERs best-effort; a down backend is not an error —
+// a table created fresh by the compose init script already has the columns.
+func (s *Sink) migrate(cfg config.ClickHouseSink, logger *slog.Logger) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, m := range migrations {
+		stmt := fmt.Sprintf("ALTER TABLE %s.%s %s", cfg.Database, cfg.Table, m)
+		if err := s.exec(ctx, stmt); err != nil {
+			logger.Debug("clickhouse migration skipped", "stmt", stmt, "err", err)
+			return
+		}
+	}
+}
+
+func (s *Sink) exec(ctx context.Context, query string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/", bytes.NewReader([]byte(query)))
+	if err != nil {
+		return err
+	}
+	if s.username != "" {
+		req.Header.Set("X-ClickHouse-User", s.username)
+		req.Header.Set("X-ClickHouse-Key", s.password)
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return fmt.Errorf("clickhouse exec status %d: %s", resp.StatusCode, msg)
+	}
+	return nil
 }
 
 func (s *Sink) Name() string { return "clickhouse" }
@@ -80,6 +131,10 @@ func (s *Sink) Write(ctx context.Context, rec *capture.Record) error {
 		TTFTMS:              rec.TTFTMS,
 		Stream:              boolByte(rec.Stream),
 		Truncated:           boolByte(rec.Truncated),
+		SessionID:           rec.SessionID,
+		App:                 rec.App,
+		ClientVersion:       rec.ClientVersion,
+		RetryCount:          rec.RetryCount,
 		SystemBytes:         rec.SystemBytes,
 		ToolsBytes:          rec.ToolsBytes,
 		TotalBytes:          rec.TotalBytes,

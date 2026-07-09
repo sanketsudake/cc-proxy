@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS requests (
   ttft_ms INTEGER,
   stream INTEGER,
   truncated INTEGER,
+  session_id TEXT,
+  app TEXT,
+  client_version TEXT,
+  retry_count INTEGER,
   system_bytes INTEGER,
   tools_bytes INTEGER,
   total_bytes INTEGER,
@@ -32,6 +36,8 @@ CREATE TABLE IF NOT EXISTS request_tools (
   approx_tokens INTEGER
 );
 
+-- idx_requests_session is created in the migrations list (sqlite.go), after
+-- the session_id column is guaranteed to exist on pre-migration databases.
 CREATE INDEX IF NOT EXISTS idx_requests_ts ON requests(ts);
 CREATE INDEX IF NOT EXISTS idx_requests_model ON requests(model);
 CREATE INDEX IF NOT EXISTS idx_tools_req ON request_tools(request_id);

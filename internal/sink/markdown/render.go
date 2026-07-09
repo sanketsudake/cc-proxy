@@ -85,6 +85,16 @@ func renderMeta(b *strings.Builder, rec *capture.Record) {
 	fmt.Fprintf(b, "- **endpoint**: %s %s\n", rec.Method, rec.Endpoint)
 	fmt.Fprintf(b, "- **upstream status**: %d\n", rec.StatusCode)
 	fmt.Fprintf(b, "- **latency**: %dms (ttft %dms)\n", rec.LatencyMS, rec.TTFTMS)
+	if rec.SessionID != "" {
+		fmt.Fprintf(b, "- **session**: %s", rec.SessionID)
+		if rec.App != "" {
+			fmt.Fprintf(b, " (%s)", rec.App)
+		}
+		fmt.Fprintf(b, "\n")
+	}
+	if rec.RetryCount > 0 {
+		fmt.Fprintf(b, "- **sdk retry**: attempt %d\n", rec.RetryCount)
+	}
 	if rec.Truncated {
 		fmt.Fprintf(b, "- **truncated**: capture incomplete (client disconnect or size cap)\n")
 	}

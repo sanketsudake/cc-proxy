@@ -34,6 +34,9 @@ func TestWriteAndQuery(t *testing.T) {
 		},
 		Headers:    map[string]string{"Authorization": "[REDACTED]"},
 		RawRequest: []byte(`{"model":"claude-sonnet-5"}`),
+		SessionID:  "sess-abc",
+		App:        "cli",
+		RetryCount: 1,
 	}
 	if err := s.Write(context.Background(), rec); err != nil {
 		t.Fatal(err)
@@ -67,5 +70,53 @@ func TestWriteAndQuery(t *testing.T) {
 	}
 	if tools != 2 {
 		t.Errorf("tool rows = %d, want 2", tools)
+	}
+
+	var session, app string
+	var retries int
+	if err := s.db.QueryRow(`SELECT session_id, app, retry_count FROM requests WHERE id = 'req-1'`).Scan(&session, &app, &retries); err != nil {
+		t.Fatal(err)
+	}
+	if session != "sess-abc" || app != "cli" || retries != 1 {
+		t.Errorf("attribution = %s/%s/%d", session, app, retries)
+	}
+}
+
+// TestMigrateOldDatabase opens a database created before the attribution
+// columns existed and verifies New() adds them.
+func TestMigrateOldDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	old, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate the pre-migration schema by dropping the new columns.
+	if _, err := old.db.Exec(`DROP INDEX idx_requests_session`); err != nil {
+		t.Fatal(err)
+	}
+	for _, col := range []string{"session_id", "app", "client_version", "retry_count"} {
+		if _, err := old.db.Exec(`ALTER TABLE requests DROP COLUMN ` + col); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := old.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close(context.Background())
+	rec := &capture.Record{ID: "m1", Timestamp: time.Now(), Model: "m", SessionID: "sess-xyz"}
+	if err := s.Write(context.Background(), rec); err != nil {
+		t.Fatalf("write after migration: %v", err)
+	}
+	var session string
+	if err := s.db.QueryRow(`SELECT session_id FROM requests WHERE id = 'm1'`).Scan(&session); err != nil {
+		t.Fatal(err)
+	}
+	if session != "sess-xyz" {
+		t.Errorf("session = %q", session)
 	}
 }

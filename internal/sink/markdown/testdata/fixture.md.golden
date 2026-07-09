@@ -5,6 +5,7 @@
 - **endpoint**: POST /v1/messages
 - **upstream status**: 200
 - **latency**: 4200ms (ttft 350ms)
+- **session**: 30ec0161-8163-4519-8956-3daf3c9e5fe5 (cli)
 
 </meta>
 

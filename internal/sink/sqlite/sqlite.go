@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -35,7 +36,29 @@ func New(path string) (*Sink, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	migrate(db)
 	return &Sink{db: db}, nil
+}
+
+// migrations are columns added after the initial schema. CREATE TABLE IF NOT
+// EXISTS skips existing databases, so each is applied idempotently here —
+// "duplicate column name" just means the database is already current.
+var migrations = []string{
+	`ALTER TABLE requests ADD COLUMN session_id TEXT`,
+	`ALTER TABLE requests ADD COLUMN app TEXT`,
+	`ALTER TABLE requests ADD COLUMN client_version TEXT`,
+	`ALTER TABLE requests ADD COLUMN retry_count INTEGER`,
+	`CREATE INDEX IF NOT EXISTS idx_requests_session ON requests(session_id)`,
+}
+
+func migrate(db *sql.DB) {
+	for _, stmt := range migrations {
+		if _, err := db.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			// Anything else is unexpected but not fatal: the insert will
+			// surface a real problem loudly.
+			continue
+		}
+	}
 }
 
 func (s *Sink) Name() string { return "sqlite" }
@@ -52,13 +75,15 @@ func (s *Sink) Write(ctx context.Context, rec *capture.Record) error {
 
 	_, err = tx.ExecContext(ctx, `INSERT OR REPLACE INTO requests (
 		id, ts, endpoint, method, model, status, latency_ms, ttft_ms, stream, truncated,
+		session_id, app, client_version, retry_count,
 		system_bytes, tools_bytes, total_bytes, message_count,
 		stop_reason, response_error,
 		input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd,
 		headers_json, raw_request, response_json
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		rec.ID, rec.Timestamp.UTC().Format(time.RFC3339Nano), rec.Endpoint, rec.Method, rec.Model,
 		rec.StatusCode, rec.LatencyMS, rec.TTFTMS, rec.Stream, rec.Truncated,
+		rec.SessionID, rec.App, rec.ClientVersion, rec.RetryCount,
 		rec.SystemBytes, rec.ToolsBytes, rec.TotalBytes, rec.MessageCount,
 		rec.StopReason, rec.ResponseError,
 		rec.Usage.InputTokens, rec.Usage.OutputTokens, rec.Usage.CacheReadTokens, rec.Usage.CacheCreationTokens,

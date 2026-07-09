@@ -29,6 +29,12 @@ type Record struct {
 	Stream     bool
 	Truncated  bool
 
+	// Client attribution, from headers Claude Code sends on every request.
+	SessionID     string // X-Claude-Code-Session-Id
+	App           string // X-App, e.g. "cli"
+	ClientVersion string // User-Agent, e.g. "claude-cli/2.1.204 (external, cli)"
+	RetryCount    int    // X-Stainless-Retry-Count: >0 means the SDK retried
+
 	Headers map[string]string // redacted
 
 	// Request-side audit

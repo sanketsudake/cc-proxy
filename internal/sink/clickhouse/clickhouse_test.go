@@ -24,8 +24,10 @@ func testRecord(id string) *capture.Record {
 		ID: id, Timestamp: time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC),
 		Endpoint: "/v1/messages", Method: "POST", Model: "claude-sonnet-5",
 		StatusCode: 200, LatencyMS: 1000,
-		Usage: sse.Usage{InputTokens: 10, OutputTokens: 5},
-		Tools: []audit.ToolStat{{Name: "bash", Bytes: 100, ApproxTokens: 25}},
+		Usage:     sse.Usage{InputTokens: 10, OutputTokens: 5},
+		Tools:     []audit.ToolStat{{Name: "bash", Bytes: 100, ApproxTokens: 25}},
+		SessionID: "sess-123",
+		App:       "cli",
 	}
 }
 
@@ -33,6 +35,11 @@ func TestBatchInsertShape(t *testing.T) {
 	var rows atomic.Int64
 	var gotQuery, gotUser atomic.Value
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("query") == "" {
+			// Startup migration ALTERs arrive in the body; acknowledge them.
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		gotQuery.Store(r.URL.Query().Get("query"))
 		gotUser.Store(r.Header.Get("X-ClickHouse-User"))
 		sc := bufio.NewScanner(r.Body)
@@ -43,6 +50,9 @@ func TestBatchInsertShape(t *testing.T) {
 			}
 			if m["model"] != "claude-sonnet-5" {
 				t.Errorf("row model = %v", m["model"])
+			}
+			if m["session_id"] != "sess-123" || m["app"] != "cli" {
+				t.Errorf("attribution = %v/%v", m["session_id"], m["app"])
 			}
 			rows.Add(1)
 		}
@@ -77,6 +87,10 @@ func TestBatchInsertShape(t *testing.T) {
 func TestRetryThenDrop(t *testing.T) {
 	var attempts atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("query") == "" {
+			w.WriteHeader(http.StatusOK) // migration ALTERs succeed
+			return
+		}
 		attempts.Add(1)
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))

@@ -48,6 +48,8 @@ func fixtureRecord() *capture.Record {
 		Tools:        a.Tools,
 		ToolsBytes:   a.ToolsBytes,
 		MessageCount: a.MessageCount,
+		SessionID:    "30ec0161-8163-4519-8956-3daf3c9e5fe5",
+		App:          "cli",
 		StopReason:   "end_turn",
 		Usage:        sse.Usage{InputTokens: 120, OutputTokens: 48, CacheReadTokens: 9000, CacheCreationTokens: 100},
 		CostUSD:      0.0123,
@@ -85,6 +87,7 @@ func TestRenderContainsKeySections(t *testing.T) {
 	for _, want := range []string{
 		"<meta>", "<audit>", "<headers>", "<system-prompt>", "<tools>", "<messages>", "<response>",
 		"**9,220 input tokens**",
+		"- **session**: 30ec0161-8163-4519-8956-3daf3c9e5fe5 (cli)",
 		"| get_weather |",
 		"Authorization: [REDACTED]",
 		"<!-- cache_control breakpoint -->",
