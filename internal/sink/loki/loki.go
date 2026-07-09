@@ -19,6 +19,11 @@ import (
 	"github.com/sanketsudake/cc-proxy/internal/sink"
 )
 
+const (
+	pushPath = "/loki/api/v1/push"
+	jobLabel = "cc-proxy" // the {job=...} stream label
+)
+
 type entry struct {
 	ts    time.Time
 	model string
@@ -35,7 +40,7 @@ type Sink struct {
 func New(cfg config.LokiSink, logger *slog.Logger) *Sink {
 	s := &Sink{
 		client:       &http.Client{Timeout: 30 * time.Second},
-		pushURL:      cfg.URL + "/loki/api/v1/push",
+		pushURL:      cfg.URL + pushPath,
 		maxLineBytes: cfg.MaxLineBytes,
 	}
 	if s.maxLineBytes <= 0 {
@@ -131,7 +136,7 @@ func (s *Sink) send(ctx context.Context, batch []entry) error {
 	var p push
 	for model, values := range groups {
 		p.Streams = append(p.Streams, stream{
-			Stream: map[string]string{"job": "cc-proxy", "model": model},
+			Stream: map[string]string{"job": jobLabel, "model": model},
 			Values: values,
 		})
 	}

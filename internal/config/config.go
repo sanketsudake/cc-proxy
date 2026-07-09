@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -94,6 +95,10 @@ type Config struct {
 	LogFormat   string `json:"log_format"` // text|json
 	Quiet       bool   `json:"quiet"`      // suppress terminal audit tables
 
+	// DataDir is where file-based sinks live by default (markdown logs,
+	// SQLite db). Defaults to ~/.cc-proxy; explicit sink paths override it.
+	DataDir string `json:"data_dir"`
+
 	QueueSize   int    `json:"queue_size"`   // per-sink buffered queue capacity
 	QueuePolicy string `json:"queue_policy"` // drop|block
 
@@ -104,33 +109,90 @@ type Config struct {
 	Pricing map[string]ModelPricing `json:"pricing"` // model-prefix -> pricing override
 }
 
+// Defaults for every tunable. Markdown/SQLite locations default relative to
+// DataDir and are resolved in Load, so a bare `cc-proxy` run never litters
+// the current working directory.
+const (
+	DefaultPort        = 8787
+	DefaultUpstreamURL = "https://api.anthropic.com"
+	DefaultLogLevel    = "info"
+	DefaultLogFormat   = "text"
+
+	DefaultDataDirName = ".cc-proxy" // under $HOME
+	DefaultLogsDirName = "logs"      // under DataDir
+	DefaultDBFileName  = "cc-proxy.db"
+
+	DefaultQueueSize       = 256
+	DefaultMaxRequestBytes = 100 << 20 // 100 MB
+	DefaultMaxCaptureBytes = 64 << 20  // 64 MB
+
+	DefaultClickHouseURL      = "http://localhost:8123"
+	DefaultClickHouseDatabase = "claude"
+	DefaultClickHouseTable    = "requests"
+	DefaultLokiURL            = "http://localhost:3100"
+	DefaultBatchSize          = 50
+	DefaultFlushInterval      = Duration(5 * time.Second)
+	DefaultLokiMaxLineBytes   = 16 << 10
+)
+
+// Queue full-queue policies.
+const (
+	QueuePolicyDrop  = "drop"
+	QueuePolicyBlock = "block"
+)
+
+// Environment variable names (all config is also reachable via flags and the
+// JSON config file; env sits between them in precedence).
+const (
+	EnvConfig             = "CAP_CONFIG"
+	EnvPort               = "CAP_PORT"
+	EnvUpstreamURL        = "CAP_UPSTREAM_URL"
+	EnvLogLevel           = "CAP_LOG_LEVEL"
+	EnvLogFormat          = "CAP_LOG_FORMAT"
+	EnvQuiet              = "CAP_QUIET"
+	EnvDataDir            = "CAP_DATA_DIR"
+	EnvQueueSize          = "CAP_QUEUE_SIZE"
+	EnvQueuePolicy        = "CAP_QUEUE_POLICY"
+	EnvMarkdownEnabled    = "CAP_SINK_MARKDOWN_ENABLED"
+	EnvMarkdownDir        = "CAP_SINK_MARKDOWN_DIR"
+	EnvSQLiteEnabled      = "CAP_SINK_SQLITE_ENABLED"
+	EnvSQLitePath         = "CAP_SINK_SQLITE_PATH"
+	EnvClickHouseEnabled  = "CAP_SINK_CLICKHOUSE_ENABLED"
+	EnvClickHouseURL      = "CAP_SINK_CLICKHOUSE_URL"
+	EnvClickHouseUsername = "CAP_SINK_CLICKHOUSE_USERNAME"
+	EnvClickHousePassword = "CAP_SINK_CLICKHOUSE_PASSWORD"
+	EnvLokiEnabled        = "CAP_SINK_LOKI_ENABLED"
+	EnvLokiURL            = "CAP_SINK_LOKI_URL"
+)
+
 func Default() Config {
 	return Config{
-		Port:            8787,
-		UpstreamURL:     "https://api.anthropic.com",
-		LogLevel:        "info",
-		LogFormat:       "text",
-		QueueSize:       256,
-		QueuePolicy:     "drop",
-		MaxRequestBytes: 100 << 20, // 100 MB
-		MaxCaptureBytes: 64 << 20,  // 64 MB
+		Port:            DefaultPort,
+		UpstreamURL:     DefaultUpstreamURL,
+		LogLevel:        DefaultLogLevel,
+		LogFormat:       DefaultLogFormat,
+		QueueSize:       DefaultQueueSize,
+		QueuePolicy:     QueuePolicyDrop,
+		MaxRequestBytes: DefaultMaxRequestBytes,
+		MaxCaptureBytes: DefaultMaxCaptureBytes,
 		Sinks: Sinks{
-			Markdown: MarkdownSink{Enabled: true, Dir: "logs"},
-			SQLite:   SQLiteSink{Enabled: true, Path: "cc-proxy.db"},
+			// Dir/Path left empty here; Load resolves them under DataDir.
+			Markdown: MarkdownSink{Enabled: true},
+			SQLite:   SQLiteSink{Enabled: true},
 			ClickHouse: ClickHouseSink{
-				URL:           "http://localhost:8123",
-				Database:      "claude",
-				Table:         "requests",
+				URL:           DefaultClickHouseURL,
+				Database:      DefaultClickHouseDatabase,
+				Table:         DefaultClickHouseTable,
 				Username:      "claude",
 				Password:      "claude",
-				BatchSize:     50,
-				FlushInterval: Duration(5 * time.Second),
+				BatchSize:     DefaultBatchSize,
+				FlushInterval: DefaultFlushInterval,
 			},
 			Loki: LokiSink{
-				URL:           "http://localhost:3100",
-				MaxLineBytes:  16 << 10,
-				BatchSize:     50,
-				FlushInterval: Duration(5 * time.Second),
+				URL:           DefaultLokiURL,
+				MaxLineBytes:  DefaultLokiMaxLineBytes,
+				BatchSize:     DefaultBatchSize,
+				FlushInterval: DefaultFlushInterval,
 			},
 		},
 	}
@@ -143,13 +205,15 @@ func Load(args []string, stderr io.Writer) (Config, error) {
 
 	fs := flag.NewFlagSet("cc-proxy", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	configPath := fs.String("config", envStr("CAP_CONFIG", ""), "path to JSON config file")
-	port := fs.Int("port", 0, "listen port (default 8787)")
-	upstream := fs.String("upstream", "", "upstream base URL (default https://api.anthropic.com)")
+	configPath := fs.String("config", envStr(EnvConfig, ""), "path to JSON config file")
+	port := fs.Int("port", 0, fmt.Sprintf("listen port (default %d)", DefaultPort))
+	upstream := fs.String("upstream", "", "upstream base URL (default "+DefaultUpstreamURL+")")
 	logLevel := fs.String("log-level", "", "log level: debug|info|warn|error")
 	logFormat := fs.String("log-format", "", "log format: text|json")
 	quiet := fs.Bool("quiet", false, "suppress per-request terminal audit output")
-	logDir := fs.String("log-dir", "", "directory for markdown request logs")
+	dataDir := fs.String("data-dir", "", "directory for captured data (default ~/"+DefaultDataDirName+")")
+	logDir := fs.String("log-dir", "", "directory for markdown request logs (default <data-dir>/"+DefaultLogsDirName+")")
+	dbPath := fs.String("db", "", "SQLite database path (default <data-dir>/"+DefaultDBFileName+")")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
 		return cfg, err
@@ -178,15 +242,39 @@ func Load(args []string, stderr io.Writer) (Config, error) {
 			cfg.LogFormat = *logFormat
 		case "quiet":
 			cfg.Quiet = *quiet
+		case "data-dir":
+			cfg.DataDir = *dataDir
 		case "log-dir":
 			cfg.Sinks.Markdown.Dir = *logDir
+		case "db":
+			cfg.Sinks.SQLite.Path = *dbPath
 		}
 	})
 
+	cfg.resolvePaths()
 	if err := cfg.validate(); err != nil {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+// resolvePaths fills the file-sink locations that were not set explicitly,
+// anchoring them under DataDir (default ~/.cc-proxy) so behavior does not
+// depend on the process's working directory.
+func (c *Config) resolvePaths() {
+	if c.DataDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = "." // no home dir (unusual): fall back to cwd
+		}
+		c.DataDir = filepath.Join(home, DefaultDataDirName)
+	}
+	if c.Sinks.Markdown.Dir == "" {
+		c.Sinks.Markdown.Dir = filepath.Join(c.DataDir, DefaultLogsDirName)
+	}
+	if c.Sinks.SQLite.Path == "" {
+		c.Sinks.SQLite.Path = filepath.Join(c.DataDir, DefaultDBFileName)
+	}
 }
 
 // ErrVersionRequested signals that --version was passed.
@@ -196,8 +284,8 @@ func (c Config) validate() error {
 	if c.Port < 1 || c.Port > 65535 {
 		return fmt.Errorf("invalid port %d", c.Port)
 	}
-	if c.QueuePolicy != "drop" && c.QueuePolicy != "block" {
-		return fmt.Errorf("queue_policy must be drop or block, got %q", c.QueuePolicy)
+	if c.QueuePolicy != QueuePolicyDrop && c.QueuePolicy != QueuePolicyBlock {
+		return fmt.Errorf("queue_policy must be %s or %s, got %q", QueuePolicyDrop, QueuePolicyBlock, c.QueuePolicy)
 	}
 	switch c.LogLevel {
 	case "debug", "info", "warn", "error":
@@ -233,24 +321,25 @@ func loadFile(path string, cfg *Config) error {
 }
 
 func applyEnv(cfg *Config) {
-	cfg.Port = envInt("CAP_PORT", cfg.Port)
-	cfg.UpstreamURL = envStr("CAP_UPSTREAM_URL", cfg.UpstreamURL)
-	cfg.LogLevel = envStr("CAP_LOG_LEVEL", cfg.LogLevel)
-	cfg.LogFormat = envStr("CAP_LOG_FORMAT", cfg.LogFormat)
-	cfg.Quiet = envBool("CAP_QUIET", cfg.Quiet)
-	cfg.QueueSize = envInt("CAP_QUEUE_SIZE", cfg.QueueSize)
-	cfg.QueuePolicy = envStr("CAP_QUEUE_POLICY", cfg.QueuePolicy)
+	cfg.Port = envInt(EnvPort, cfg.Port)
+	cfg.UpstreamURL = envStr(EnvUpstreamURL, cfg.UpstreamURL)
+	cfg.LogLevel = envStr(EnvLogLevel, cfg.LogLevel)
+	cfg.LogFormat = envStr(EnvLogFormat, cfg.LogFormat)
+	cfg.Quiet = envBool(EnvQuiet, cfg.Quiet)
+	cfg.DataDir = envStr(EnvDataDir, cfg.DataDir)
+	cfg.QueueSize = envInt(EnvQueueSize, cfg.QueueSize)
+	cfg.QueuePolicy = envStr(EnvQueuePolicy, cfg.QueuePolicy)
 
-	cfg.Sinks.Markdown.Enabled = envBool("CAP_SINK_MARKDOWN_ENABLED", cfg.Sinks.Markdown.Enabled)
-	cfg.Sinks.Markdown.Dir = envStr("CAP_SINK_MARKDOWN_DIR", cfg.Sinks.Markdown.Dir)
-	cfg.Sinks.SQLite.Enabled = envBool("CAP_SINK_SQLITE_ENABLED", cfg.Sinks.SQLite.Enabled)
-	cfg.Sinks.SQLite.Path = envStr("CAP_SINK_SQLITE_PATH", cfg.Sinks.SQLite.Path)
-	cfg.Sinks.ClickHouse.Enabled = envBool("CAP_SINK_CLICKHOUSE_ENABLED", cfg.Sinks.ClickHouse.Enabled)
-	cfg.Sinks.ClickHouse.URL = envStr("CAP_SINK_CLICKHOUSE_URL", cfg.Sinks.ClickHouse.URL)
-	cfg.Sinks.ClickHouse.Username = envStr("CAP_SINK_CLICKHOUSE_USERNAME", cfg.Sinks.ClickHouse.Username)
-	cfg.Sinks.ClickHouse.Password = envStr("CAP_SINK_CLICKHOUSE_PASSWORD", cfg.Sinks.ClickHouse.Password)
-	cfg.Sinks.Loki.Enabled = envBool("CAP_SINK_LOKI_ENABLED", cfg.Sinks.Loki.Enabled)
-	cfg.Sinks.Loki.URL = envStr("CAP_SINK_LOKI_URL", cfg.Sinks.Loki.URL)
+	cfg.Sinks.Markdown.Enabled = envBool(EnvMarkdownEnabled, cfg.Sinks.Markdown.Enabled)
+	cfg.Sinks.Markdown.Dir = envStr(EnvMarkdownDir, cfg.Sinks.Markdown.Dir)
+	cfg.Sinks.SQLite.Enabled = envBool(EnvSQLiteEnabled, cfg.Sinks.SQLite.Enabled)
+	cfg.Sinks.SQLite.Path = envStr(EnvSQLitePath, cfg.Sinks.SQLite.Path)
+	cfg.Sinks.ClickHouse.Enabled = envBool(EnvClickHouseEnabled, cfg.Sinks.ClickHouse.Enabled)
+	cfg.Sinks.ClickHouse.URL = envStr(EnvClickHouseURL, cfg.Sinks.ClickHouse.URL)
+	cfg.Sinks.ClickHouse.Username = envStr(EnvClickHouseUsername, cfg.Sinks.ClickHouse.Username)
+	cfg.Sinks.ClickHouse.Password = envStr(EnvClickHousePassword, cfg.Sinks.ClickHouse.Password)
+	cfg.Sinks.Loki.Enabled = envBool(EnvLokiEnabled, cfg.Sinks.Loki.Enabled)
+	cfg.Sinks.Loki.URL = envStr(EnvLokiURL, cfg.Sinks.Loki.URL)
 }
 
 func envStr(key, def string) string {

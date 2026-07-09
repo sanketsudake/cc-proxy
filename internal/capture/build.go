@@ -10,6 +10,14 @@ import (
 	"github.com/sanketsudake/cc-proxy/internal/sse"
 )
 
+// Headers Claude Code sends on every request, used for attribution.
+const (
+	HeaderSessionID  = "X-Claude-Code-Session-Id"
+	HeaderApp        = "X-App"
+	HeaderUserAgent  = "User-Agent"
+	HeaderRetryCount = "X-Stainless-Retry-Count"
+)
+
 // Builder converts raw proxy captures into Records.
 type Builder struct {
 	Estimator *cost.Estimator
@@ -37,9 +45,9 @@ func (b *Builder) Build(c *proxy.Capture) *Record {
 		Truncated:  c.Truncated,
 		Headers:    RedactHeaders(c.RequestHeader),
 
-		SessionID:     c.RequestHeader.Get("X-Claude-Code-Session-Id"),
-		App:           c.RequestHeader.Get("X-App"),
-		ClientVersion: c.RequestHeader.Get("User-Agent"),
+		SessionID:     c.RequestHeader.Get(HeaderSessionID),
+		App:           c.RequestHeader.Get(HeaderApp),
+		ClientVersion: c.RequestHeader.Get(HeaderUserAgent),
 		AccountID:     a.AccountID,
 		DeviceID:      a.DeviceID,
 
@@ -58,7 +66,7 @@ func (b *Builder) Build(c *proxy.Capture) *Record {
 	if !c.FirstByte.IsZero() {
 		rec.TTFTMS = c.FirstByte.Sub(c.Start).Milliseconds()
 	}
-	if v := c.RequestHeader.Get("X-Stainless-Retry-Count"); v != "" {
+	if v := c.RequestHeader.Get(HeaderRetryCount); v != "" {
 		rec.RetryCount, _ = strconv.Atoi(v)
 	}
 	if b.Estimator != nil {

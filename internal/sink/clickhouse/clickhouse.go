@@ -19,6 +19,12 @@ import (
 	"github.com/sanketsudake/cc-proxy/internal/sink"
 )
 
+// ClickHouse HTTP-interface auth headers.
+const (
+	headerUser = "X-ClickHouse-User"
+	headerKey  = "X-ClickHouse-Key"
+)
+
 // row is one JSONEachRow line; column names match the DDL in
 // deploy/clickhouse/init/01_schema.sql.
 type row struct {
@@ -106,8 +112,8 @@ func (s *Sink) exec(ctx context.Context, query string) error {
 		return err
 	}
 	if s.username != "" {
-		req.Header.Set("X-ClickHouse-User", s.username)
-		req.Header.Set("X-ClickHouse-Key", s.password)
+		req.Header.Set(headerUser, s.username)
+		req.Header.Set(headerKey, s.password)
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {
@@ -174,8 +180,8 @@ func (s *Sink) send(ctx context.Context, batch []row) error {
 	}
 	req.Header.Set("Content-Type", "application/x-ndjson")
 	if s.username != "" {
-		req.Header.Set("X-ClickHouse-User", s.username)
-		req.Header.Set("X-ClickHouse-Key", s.password)
+		req.Header.Set(headerUser, s.username)
+		req.Header.Set(headerKey, s.password)
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {

@@ -21,7 +21,7 @@ Point Claude Code at it in another terminal:
 ANTHROPIC_BASE_URL=http://localhost:8787 claude
 ```
 
-Every `/v1/messages` request now prints a ranked audit table to the proxy's terminal and writes a readable `.md` + raw `.request.txt` pair under `logs/`, plus a row in `cc-proxy.db` (SQLite).
+Every `/v1/messages` request now prints a ranked audit table to the proxy's terminal and writes a readable `.md` + raw `.request.txt` pair under `~/.cc-proxy/logs/`, plus a row in `~/.cc-proxy/cc-proxy.db` (SQLite).
 `count_tokens` housekeeping calls pass through unlogged.
 
 ## The analytics stack (optional)
@@ -68,8 +68,9 @@ Precedence: flags > environment (`CAP_*`) > JSON config file (`--config config.j
 | `CAP_LOG_LEVEL` / `CAP_LOG_FORMAT` | `info` / `text` | slog level and format (`json` available) |
 | `CAP_QUIET` | `false` | Suppress per-request terminal audit tables |
 | `CAP_QUEUE_SIZE` / `CAP_QUEUE_POLICY` | `256` / `drop` | Per-sink queue capacity and full-queue policy (`drop` or `block`) |
-| `CAP_SINK_MARKDOWN_ENABLED` / `CAP_SINK_MARKDOWN_DIR` | `true` / `logs` | Markdown sink |
-| `CAP_SINK_SQLITE_ENABLED` / `CAP_SINK_SQLITE_PATH` | `true` / `cc-proxy.db` | SQLite sink |
+| `CAP_DATA_DIR` | `~/.cc-proxy` | Base directory for captured data (markdown logs + SQLite db) |
+| `CAP_SINK_MARKDOWN_ENABLED` / `CAP_SINK_MARKDOWN_DIR` | `true` / `<data-dir>/logs` | Markdown sink |
+| `CAP_SINK_SQLITE_ENABLED` / `CAP_SINK_SQLITE_PATH` | `true` / `<data-dir>/cc-proxy.db` | SQLite sink |
 | `CAP_SINK_CLICKHOUSE_ENABLED` / `CAP_SINK_CLICKHOUSE_URL` | `false` / `http://localhost:8123` | ClickHouse sink (batch inserts) |
 | `CAP_SINK_LOKI_ENABLED` / `CAP_SINK_LOKI_URL` | `false` / `http://localhost:3100` | Loki sink (push API) |
 
@@ -94,12 +95,12 @@ All cost figures are estimates — prices drift, override them when they do.
 **SQLite** — zero services needed:
 
 ```sh
-sqlite3 cc-proxy.db \
+sqlite3 ~/.cc-proxy/cc-proxy.db \
   "SELECT model, count(*), sum(input_tokens + cache_read_tokens), round(sum(cost_usd), 4)
    FROM requests GROUP BY model"
 
 # Per-session breakdown (which terminal/session spent what)
-sqlite3 cc-proxy.db \
+sqlite3 ~/.cc-proxy/cc-proxy.db \
   "SELECT substr(session_id, 1, 8) AS session, count(*) AS reqs,
           sum(output_tokens) AS out_tokens, round(sum(cost_usd), 4) AS cost
    FROM requests WHERE session_id != '' GROUP BY session_id ORDER BY cost DESC"

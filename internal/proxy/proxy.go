@@ -47,6 +47,14 @@ type Options struct {
 	Logger    *slog.Logger
 }
 
+// HealthzPath is served locally by the proxy (never forwarded upstream) so
+// wrapper scripts can detect a running instance.
+const HealthzPath = "/healthz"
+
+// countTokensPathPart marks token-counting housekeeping calls, which are
+// proxied but never captured.
+const countTokensPathPart = "count_tokens"
+
 type captureKey struct{}
 
 // Handler proxies requests to the upstream and tees captured exchanges.
@@ -112,13 +120,13 @@ func newTransport() *http.Transport {
 // count_tokens calls fire constantly as housekeeping and never carry a reply
 // worth reading.
 func skipCapture(path string) bool {
-	return strings.Contains(path, "count_tokens")
+	return strings.Contains(path, countTokensPathPart)
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Served locally, never proxied: lets wrapper scripts check whether a
 	// cc-proxy instance is already listening on this port.
-	if r.URL.Path == "/healthz" {
+	if r.URL.Path == HealthzPath {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok","service":"cc-proxy"}`))
 		return
