@@ -1,0 +1,73 @@
+# goreleaser build/release config. Validate with `goreleaser check`.
+# Release: push a tag (e.g. v0.1.0); the release workflow runs `goreleaser release`.
+version: 2
+
+project_name: cc-proxy
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: cc-proxy
+    main: .
+    binary: cc-proxy
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/sanketsudake/cc-proxy/internal/version.Version={{ .Version }} -X github.com/sanketsudake/cc-proxy/internal/version.Commit={{ .ShortCommit }}
+
+archives:
+  - id: default
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    formats:
+      - tar.gz
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+
+# Homebrew tap (macOS cask for the prebuilt binary). Requires the
+# `sanketsudake/homebrew-tap` repo and a HOMEBREW_TAP_GITHUB_TOKEN secret (a
+# fine-grained PAT scoped to that tap repo with Contents: read/write) so
+# goreleaser can push the generated cask there during a release. Linux users
+# install via the tarball or `go install`.
+homebrew_casks:
+  - name: cc-proxy
+    repository:
+      owner: sanketsudake
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: "https://github.com/sanketsudake/cc-proxy"
+    description: "Transparent logging proxy between Claude Code and the Anthropic API"
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/cc-proxy"]
+          end
