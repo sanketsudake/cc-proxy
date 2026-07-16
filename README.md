@@ -1,5 +1,11 @@
 # cc-proxy
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/sanketsudake/cc-proxy.svg)](https://pkg.go.dev/github.com/sanketsudake/cc-proxy)
+[![CI](https://github.com/sanketsudake/cc-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/sanketsudake/cc-proxy/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/sanketsudake/cc-proxy/actions/workflows/codeql.yml/badge.svg)](https://github.com/sanketsudake/cc-proxy/actions/workflows/codeql.yml)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/sanketsudake/cc-proxy)](go.mod)
+
 See what Claude Code actually sends the model — and analyze it however you like.
 
 A transparent logging proxy in Go that sits between the Claude Code CLI and the Anthropic API.
@@ -9,6 +15,14 @@ A bundled docker-compose stack gives you Grafana dashboards over your token usag
 Inspired by [Matt Pocock's agent-proxy gist](https://gist.github.com/mattpocock/5b3d76ea21f5f698aefded47a9cea3b1); the Markdown output is format-compatible with it.
 
 ## Quick start
+
+Install via Homebrew (macOS):
+
+```sh
+brew install --cask sanketsudake/tap/cc-proxy
+```
+
+Or build from source:
 
 ```sh
 make build
@@ -139,3 +153,7 @@ make lint    # golangci-lint run
 The proxy test suite includes a real-time streaming proof: the client must receive the first SSE event while the upstream is still mid-stream.
 Golden-file tests pin the Markdown output format (`go test ./internal/sink/markdown -update` to regenerate after intentional changes).
 ClickHouse and Loki sinks are tested against httptest servers asserting wire shape, batching, and retry-then-drop behavior — no docker needed for `make test`.
+
+## License
+
+Released under the [MIT License](LICENSE).
