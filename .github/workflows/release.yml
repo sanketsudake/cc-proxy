@@ -20,6 +20,19 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+
+      # A flake building `src = self` has no git tag to read, so flake.nix
+      # carries the version as a literal. Fail the release rather than ship a
+      # binary that reports the wrong version to nix users.
+      - name: flake.nix version matches the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          flake=$(sed -n 's/^ *version = "\(.*\)";$/\1/p' flake.nix)
+          if [ "$tag" != "$flake" ]; then
+            echo "::error::tag $tag does not match flake.nix version $flake"
+            exit 1
+          fi
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
