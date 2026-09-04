@@ -6,3 +6,6 @@
 .env
 dist/
 coverage.out
+
+# nix build output
+/result
