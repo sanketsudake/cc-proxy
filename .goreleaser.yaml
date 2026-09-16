@@ -65,9 +65,28 @@ homebrew_casks:
     directory: Casks
     homepage: "https://github.com/sanketsudake/cc-proxy"
     description: "Transparent logging proxy between Claude Code and the Anthropic API"
-    hooks:
-      post:
-        install: |
-          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/cc-proxy"]
-          end
+    # Strip the quarantine xattr so the unsigned binary runs without a Gatekeeper prompt.
+    #
+    # This is the body GoReleaser's own deprecation notice prescribes for
+    # hooks.post.install_steps, but that key ships in v2.19; until then the only
+    # way to emit `postflight_steps` is custom_block, because GoReleaser still
+    # wraps hooks.post.install in Homebrew's deprecated `postflight`.
+    # The {{ "..." }} escape is needed because GoReleaser templates the rendered
+    # cask once, and would otherwise read {{staged_path}} as one of its own
+    # template calls.
+    #
+    # TODO(goreleaser#6873): on v2.19, delete custom_block and use
+    #   hooks:
+    #     post:
+    #       install_steps: |
+    #         on_macos do
+    #           run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/cc-proxy"], must_succeed: false
+    #         end
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr",
+              args:         ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/cc-proxy"],
+              must_succeed: false
+        end
+      end
