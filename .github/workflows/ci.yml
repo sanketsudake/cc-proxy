@@ -45,3 +45,26 @@ jobs:
         run: nix build .#cc-proxy --print-build-logs
       - name: Smoke-test the built binary
         run: ./result/bin/cc-proxy --version
+
+  # The Homebrew cask this repo publishes is generated from .goreleaser.yaml, so
+  # a mistake in the homebrew_casks block otherwise surfaces at tag time, inside
+  # a release. `check` validates the config on every push instead.
+  #
+  # The schema probe is the trigger for dropping the custom_block workaround:
+  # `hooks.post.install_steps` is unreleased (goreleaser#6873), and this warns
+  # on the first push after it lands.
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: check
+
+      - name: Notice when hooks.post.install_steps ships
+        run: |
+          if goreleaser schema | jq -e '.["$defs"].HomebrewCaskHook.properties.install_steps' >/dev/null; then
+            echo "::warning::hooks.post.install_steps is available — migrate off custom_block (goreleaser#6873)"
+          fi
